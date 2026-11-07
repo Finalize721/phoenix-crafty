@@ -1,3 +1,4 @@
+import { ThemeScene } from "./ThemeStudio";
 import { useNavigate } from "@solidjs/router";
 import Bluetooth from "lucide-solid/icons/bluetooth";
 import ChevronDown from "lucide-solid/icons/chevron-down";
@@ -180,7 +181,7 @@ export const Connect = () => {
   });
 
   return (
-    <div class="relative flex min-h-dvh flex-col overflow-hidden">
+    <div class="relative flex min-h-[80dvh] flex-col overflow-hidden">
       <div
         aria-hidden="true"
         class="pointer-events-none absolute top-24 left-1/2 size-[440px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,var(--glow),transparent)] opacity-0 fx:opacity-50 fx-strong:opacity-90"
@@ -189,8 +190,11 @@ export const Connect = () => {
         <ThemeToggle />
       </div>
 
-      <main class="relative mx-auto flex w-full max-w-sm flex-1 flex-col items-center gap-7 px-6 pt-10 pb-10">
-        <BluetoothBeacon active={isConnecting() || isReconnecting()} />
+      <main class="relative mx-auto flex w-full max-w-lg flex-1 flex-col items-center gap-5 px-5 pt-3 pb-10">
+        <ThemeScene />
+        <div class="connection-beacon">
+          <BluetoothBeacon active={isConnecting() || isReconnecting()} />
+        </div>
 
         <Show when={isNotConnected()}>
           <div class="flex flex-col items-center gap-2.5 text-center">

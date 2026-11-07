@@ -5,7 +5,7 @@ test.describe("Produktions-Build unter dem Pages-Pfad", () => {
     await page.goto("connect");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await page.reload();
-    await expect(page).toHaveURL(/\/reactive-volcano-app\/connect$/);
+    await expect(page).toHaveURL(/\/phoenix-crafty\/connect$/);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
 
@@ -13,8 +13,8 @@ test.describe("Produktions-Build unter dem Pages-Pfad", () => {
     const response = await page.request.get("manifest.webmanifest");
     expect(response.ok()).toBe(true);
     const manifest = await response.json();
-    expect(manifest.start_url).toContain("/reactive-volcano-app/");
-    expect(manifest.scope).toBe("/reactive-volcano-app/");
+    expect(manifest.start_url).toContain("/phoenix-crafty/");
+    expect(manifest.scope).toBe("/phoenix-crafty/");
   });
 
   test("sollte offline starten, sobald der Service Worker aktiv ist", async ({

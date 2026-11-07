@@ -11,7 +11,7 @@
     "typecheck": "bun run i18n && tsc --noEmit && tsc -p tsconfig.node.json",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "build": "bun run typecheck && bun --bun vite build --base=/reactive-volcano-app/",
+    "build": "bun run typecheck && bun --bun vite build --base=/phoenix-crafty/",
     "build:root": "bun run typecheck && bun --bun vite build",
     "preview": "bun --bun vite preview",
     "icons": "bun scripts/icons/generate.mjs",

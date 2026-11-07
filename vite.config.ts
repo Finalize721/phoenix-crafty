@@ -33,15 +33,15 @@ export default defineConfig({
       includeManifestIcons: false,
       // Icons are rendered from scripts/icons/icon.svg: bun run icons
       manifest: {
-        name: "Reactive Volcano App",
-        short_name: "Volcano App",
+        name: "Crafty Atelier",
+        short_name: "Crafty Atelier",
         description:
           "Control Storz & Bickel vaporizers (Volcano Hybrid, Venty, Veazy, Crafty) via Web Bluetooth",
         lang: "en",
         display: "standalone",
         // Matches the dark theme, so the splash screen does not flash white
-        theme_color: "#09090b",
-        background_color: "#09090b",
+        theme_color: "#0b1426",
+        background_color: "#0b1426",
         categories: ["utilities", "lifestyle"],
         icons: [
           {
@@ -61,23 +61,6 @@ export default defineConfig({
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",
-          },
-        ],
-        // Shown in the richer install dialog on Android
-        screenshots: [
-          {
-            src: "screenshots/control.png",
-            sizes: "1082x2202",
-            type: "image/png",
-            form_factor: "narrow",
-            label: "Temperature control",
-          },
-          {
-            src: "screenshots/workflows.png",
-            sizes: "1082x2202",
-            type: "image/png",
-            form_factor: "narrow",
-            label: "Workflows",
           },
         ],
       },

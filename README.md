@@ -1,3 +1,17 @@
+# Crafty Atelier
+
+Three mobile themes for Crafty+: Phoenix Court (blue courtroom), Ghost Signal (mint radio terminal), and Jellyfish Hotel (underwater boutique hotel). Each supports light and dark mode. Theme preferences stay on your device.
+
+Open https://Finalize721.github.io/phoenix-crafty/ in Chrome on Android, connect your device, and install from the browser menu. Bluetooth requires HTTPS. The PWA caches the app for offline use after loading.
+
+This is an independent fan modification of [Reactive Volcano App](https://github.com/firsttris/reactive-volcano-app), licensed under AGPL-3.0. Original copyright and license retained. No affiliation with Capcom or Storz & Bickel. Courtroom illustration is original SVG; no game assets are bundled. Bluetooth drivers and device controls are inherited unchanged. Actual hardware validation is still required.
+
+Development: `bun install --frozen-lockfile`, `bun run dev`. Validation: `bun run build`, `bun run test`. GitHub Actions deploys `dist` to Pages on main.
+
+---
+
+## Upstream documentation
+
 <div align="center">
 
 # Reactive Volcano App

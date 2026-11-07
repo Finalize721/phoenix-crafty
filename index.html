@@ -5,21 +5,22 @@
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="theme-color" content="#09090b" />
+    <meta name="theme-color" content="#0b1426" />
     <meta
       name="description"
       content="Control Storz & Bickel vaporizers (Volcano Hybrid, Venty, Veazy, Crafty) via Web Bluetooth"
     />
-    <meta name="apple-mobile-web-app-title" content="Volcano App" />
+    <meta name="apple-mobile-web-app-title" content="Crafty Atelier" />
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
-    <title>Reactive Volcano App</title>
+    <title>Crafty Atelier</title>
     <script>
       // Apply the stored theme before the first paint to avoid a flash
       (() => {
         try {
+          document.documentElement.dataset.skin = ["court", "signal", "jelly"].includes(localStorage.getItem("crafty-theme")) ? localStorage.getItem("crafty-theme") : "court";
           const stored = localStorage.getItem("isDarkModeVReverse");
           const dark =
             stored === null
@@ -28,7 +29,7 @@
           document.documentElement.classList.toggle("dark", dark);
           document
             .querySelector('meta[name="theme-color"]')
-            .setAttribute("content", dark ? "#09090b" : "#fafafa");
+            .setAttribute("content", dark ? "#0b1426" : "#eef3fc");
           const effects = localStorage.getItem("effects");
           document.documentElement.dataset.effects =
             effects === "off" || effects === "strong" ? effects : "subtle";

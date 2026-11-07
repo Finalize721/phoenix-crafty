@@ -8,8 +8,8 @@ import {
   useContext,
 } from "solid-js";
 
-const THEME_COLOR_LIGHT = "#fafafa";
-const THEME_COLOR_DARK = "#09090b";
+const THEME_COLOR_LIGHT = "#eef3fc";
+const THEME_COLOR_DARK = "#0b1426";
 
 interface DarkModeContextType {
   isDarkMode: Accessor<boolean>;

@@ -33,7 +33,7 @@
   "connection_notConnected": "Device not connected",
   "connection_connecting": "Connecting to device...",
   "connect_title": "Connect Your Device",
-  "connect_intro": "This app supports Volcano Hybrid, Veazy, and Venty devices. Click the button below to connect via Bluetooth.",
+  "connect_intro": "Connect your Crafty+ via Bluetooth. Also supports Crafty, Volcano Hybrid, Venty and Veazy.",
   "connect_button": "Connect Device",
   "temperature_target": "Target Temperature",
   "temperature_effective": "Effective",
