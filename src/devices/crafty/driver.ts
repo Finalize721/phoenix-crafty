@@ -143,6 +143,7 @@ export interface CraftyDriver {
   setBoostTemperature(celsius: number): Promise<void>;
   setLedBrightness(value: number): Promise<void>;
   setAutoOffCountdown(seconds: number): Promise<void>;
+  readAutoOffRemaining(): Promise<void>;
   /** Writes the whole status register 2 and reads it back */
   setStatusRegister2(value: number): Promise<void>;
   heaterOn(): Promise<void>;
@@ -189,6 +190,7 @@ export const createCraftyDriver = (
       device.write("boostTemp", encodeBoostTemperature(celsius)),
     setLedBrightness: (value) =>
       device.write("ledBrightness", encodeUint16(value)),
+    readAutoOffRemaining: () => device.read("autoOffRemaining"),
     setAutoOffCountdown: (seconds) =>
       device.writeSequence([
         ["securityCode", encodeUint16(SecurityCode.AUTO_OFF_COUNTDOWN)],

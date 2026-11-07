@@ -1,4 +1,5 @@
-import { onCleanup } from "solid-js";
+import { createSessionExtension } from "./sessionExtension";
+import { createEffect, createSignal, onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { AnalysisResult } from "../shared/analysis";
 import { createDebouncedWriter } from "../shared/debouncedWriter";
@@ -96,6 +97,40 @@ export const createCraftyStore = (
     return driver.setStatusRegister2(value).catch(logError(action));
   };
 
+  const [extension, setExtension] = createSignal({
+    active: false,
+    message: "",
+  });
+  const extensionEligible = () =>
+    state.loaded &&
+    driver.isCraftyPlus &&
+    state.autoOffCountdown === 300 &&
+    isHeaterActive(state.projectRegister) &&
+    isSetpointReached(state.statusRegister2) &&
+    document.visibilityState === "visible";
+  const session = createSessionExtension({
+    eligible: extensionEligible,
+    readRemaining: async () => {
+      await driver.readAutoOffRemaining();
+      return state.autoOffRemaining;
+    },
+    reapply: () => driver.setAutoOffCountdown(300),
+    report: (active, message) => setExtension({ active, message }),
+  });
+  const visibilityChanged = () => {
+    if (document.visibilityState !== "visible" && extension().active)
+      session.stop(
+        "App im Hintergrund. Verlängerung gestoppt; Gerätetimer läuft weiter."
+      );
+  };
+  document.addEventListener("visibilitychange", visibilityChanged);
+  createEffect(() => {
+    if (extension().active && !extensionEligible()) session.stop();
+  });
+  onCleanup(() => {
+    session.stop();
+    document.removeEventListener("visibilitychange", visibilityChanged);
+  });
   const actions = {
     /** Target temperature in °C */
     setTargetTemp(celsius: number) {
@@ -210,6 +245,9 @@ export const createCraftyStore = (
 
   return {
     state,
+    extension,
+    session,
+    extensionEligible,
     actions,
     derived,
     firmwareVersion: driver.firmwareVersion,

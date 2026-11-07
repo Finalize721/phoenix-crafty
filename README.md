@@ -10,6 +10,12 @@ Development: `bun install --frozen-lockfile`, `bun run dev`. Validation: `bun ru
 
 ---
 
+## Experimental session extension
+
+On the Crafty+ control screen, “Verlängerung testen” attempts to reapply the supported 300-second auto-off setting every 30 seconds during a bounded five-minute window. At most nine writes occur (30 through 270 seconds), so a successful last reset leaves approximately 9.5 minutes from activation. This is a hardware experiment: writing the official timeout setting is known; whether reapplying it resets the running countdown is not yet verified on a real device. The app reads the timer before and after each write and stops unless a substantial reset to 290–300 seconds is observed.
+
+Requires target temperature reached, heater active, timeout already set to 300 seconds, and a visible page. Stops on backgrounding, disconnect, loss of eligibility, missing confirmation, Bluetooth failure, or an eight-second operation timeout. No automatic heater-on command, saved enable flag, or automatic restart. Stopping leaves the device's normal timeout running. Natural device activity may independently reset its inactivity timer, so this is not an exact total-session shutoff deadline. Keep the app foregrounded during the experiment.
+
 ## Upstream documentation
 
 <div align="center">
