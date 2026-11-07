@@ -1,4 +1,3 @@
-import { ThemeScene } from "./ThemeStudio";
 import { useNavigate } from "@solidjs/router";
 import Bluetooth from "lucide-solid/icons/bluetooth";
 import ChevronDown from "lucide-solid/icons/chevron-down";
@@ -191,7 +190,6 @@ export const Connect = () => {
       </div>
 
       <main class="relative mx-auto flex w-full max-w-lg flex-1 flex-col items-center gap-5 px-5 pt-3 pb-10">
-        <ThemeScene />
         <div class="connection-beacon">
           <BluetoothBeacon active={isConnecting() || isReconnecting()} />
         </div>

@@ -1,4 +1,3 @@
-import { ThemeScene } from "../components/ThemeStudio";
 import { type RouteSectionProps, useNavigate } from "@solidjs/router";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import MapPin from "lucide-solid/icons/map-pin";
@@ -18,19 +17,12 @@ import { buildRoute } from "../routes";
 import { ConnectionState } from "../utils/uuids";
 
 export const CraftyView: Component = () => {
-  const { state, actions, derived, isCraftyPlus } = useCrafty();
+  const { actions, derived, isCraftyPlus } = useCrafty();
 
   // Keep the screen on while the device heats
 
   return (
     <>
-      <ThemeScene
-        ready={
-          state.loaded &&
-          derived.isHeaterActive() &&
-          derived.isSetpointReached()
-        }
-      />
       <ShutdownTime />
       <Temperature />
       {/* Find My Device - only Crafty+ */}
