@@ -38,6 +38,20 @@ describe("Crafty charging ETA", () => {
     });
   });
 
+  it("estimates charge speed across frequent battery updates", () => {
+    const samples: BatterySample[] = Array.from({ length: 21 }, (_, level) => ({
+      level,
+      time: level * 30_000,
+      sessionId: "session",
+    }));
+    const now = 20 * 30_000;
+
+    expect(estimateChargingEta(samples, 20, "session", now)).toEqual({
+      expiresAt: now + 30 * 60_000,
+      remainingMinutes: 40,
+    });
+  });
+
   it("uses measured high-battery rates when charging slows near full", () => {
     const samples: BatterySample[] = [
       { level: 50, time: 0, sessionId: "session" },

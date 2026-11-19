@@ -129,12 +129,22 @@ export const estimateChargingEta = (
 
   const rates: RateSample[] = [];
   for (let index = 1; index < samples.length; index++) {
-    const before = samples[index - 1];
     const after = samples[index];
+    let beforeIndex = index - 1;
+    while (
+      beforeIndex >= 0 &&
+      samples[beforeIndex].sessionId === after.sessionId &&
+      after.time - samples[beforeIndex].time < MIN_RATE_INTERVAL_MS
+    ) {
+      beforeIndex--;
+    }
+    if (beforeIndex < 0 || samples[beforeIndex].sessionId !== after.sessionId) {
+      continue;
+    }
+    const before = samples[beforeIndex];
     const elapsed = after.time - before.time;
     const increase = after.level - before.level;
     if (
-      before.sessionId === after.sessionId &&
       increase > 0 &&
       elapsed >= MIN_RATE_INTERVAL_MS &&
       elapsed <= MAX_RATE_INTERVAL_MS

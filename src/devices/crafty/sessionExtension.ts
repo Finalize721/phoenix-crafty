@@ -1,5 +1,5 @@
 /** Bounded experiment: reapply the supported 300-second setting, never power on. */
-export const SESSION_EXTENSION_DURATIONS = [5, 10, 15] as const;
+export const SESSION_EXTENSION_DURATIONS = [15, 30, 45, 60] as const;
 export type SessionExtensionDuration =
   (typeof SESSION_EXTENSION_DURATIONS)[number];
 
@@ -76,7 +76,7 @@ export const createSessionExtension = (io: {
     }
   };
   return {
-    start(durationMinutes: SessionExtensionDuration = 5) {
+    start(durationMinutes: SessionExtensionDuration = 15) {
       stop();
       if (!io.eligible()) {
         io.report(

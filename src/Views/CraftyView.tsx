@@ -46,7 +46,7 @@ export const CraftyView: Component = () => {
     extensionEligible,
   } = useCrafty();
   const [extensionMinutes, setExtensionMinutes] =
-    createSignal<SessionExtensionDuration>(5);
+    createSignal<SessionExtensionDuration>(15);
 
   // Keep the screen on while the device heats
 
@@ -71,14 +71,17 @@ export const CraftyView: Component = () => {
               disabled={extension().active}
               onChange={(event) => {
                 switch (event.currentTarget.value) {
-                  case "10":
-                    setExtensionMinutes(10);
+                  case "30":
+                    setExtensionMinutes(30);
                     break;
-                  case "15":
-                    setExtensionMinutes(15);
+                  case "45":
+                    setExtensionMinutes(45);
+                    break;
+                  case "60":
+                    setExtensionMinutes(60);
                     break;
                   default:
-                    setExtensionMinutes(5);
+                    setExtensionMinutes(15);
                 }
               }}
             >
