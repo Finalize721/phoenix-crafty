@@ -4,12 +4,26 @@ import MapPin from "lucide-solid/icons/map-pin";
 import History from "lucide-solid/icons/rotate-ccw-clock";
 import SlidersHorizontal from "lucide-solid/icons/sliders-horizontal";
 import Thermometer from "lucide-solid/icons/thermometer";
-import { type Component, createEffect, type JSX, Show } from "solid-js";
+import {
+  type Component,
+  createEffect,
+  createSignal,
+  type JSX,
+  onCleanup,
+  Show,
+} from "solid-js";
 import { BatteryChip } from "../components/BatteryChip";
 import { ShutdownTime } from "../components/crafty/ShutdownTime";
 import { Temperature } from "../components/crafty/Temperature";
 import { DeviceShell } from "../components/DeviceShell";
+import {
+  type BatterySample,
+  estimateChargingEta,
+  readChargingHistory,
+  recordBatterySample,
+} from "../devices/crafty/chargingEta";
 import { m } from "../paraglide/messages";
+import { getLocale } from "../paraglide/runtime";
 import { useBluetooth } from "../provider/BluetoothProvider";
 import { CraftyProvider, useCrafty } from "../provider/CraftyProvider";
 import { LiveSessionProvider } from "../provider/LiveSessionProvider";
@@ -92,6 +106,110 @@ const CraftyBattery = () => {
   return <BatteryChip level={state.loaded ? state.batteryLevel : undefined} />;
 };
 
+const CraftyChargingEta = () => {
+  const { state, isCraftyPlus } = useCrafty();
+  const { deviceInfo, knownDevice } = useBluetooth();
+  const [eta, setEta] = createSignal<
+    (ReturnType<typeof estimateChargingEta> & { fullAt?: number }) | undefined
+  >();
+  const [now, setNow] = createSignal(Date.now());
+  let historyId: string | undefined;
+  let sessionId: string | undefined;
+  let samples: BatterySample[] = [];
+
+  createEffect(() => {
+    const level = state.batteryLevel;
+    const id = deviceInfo().serialNumber || knownDevice()?.id;
+    if (!state.loaded || !isCraftyPlus || !id) {
+      setEta(undefined);
+      return;
+    }
+
+    if (historyId !== id) {
+      historyId = id;
+      sessionId = crypto.randomUUID();
+      samples = readChargingHistory(id);
+    }
+    const activeSessionId = sessionId ?? crypto.randomUUID();
+    sessionId = activeSessionId;
+    const now = Date.now();
+    samples = recordBatterySample(id, level, now, activeSessionId, samples);
+
+    const estimate = estimateChargingEta(samples, level, activeSessionId, now);
+    const fullAt =
+      estimate?.remainingMinutes === undefined
+        ? undefined
+        : now + estimate.remainingMinutes * 60_000;
+    setEta(estimate ? { ...estimate, fullAt } : undefined);
+    if (estimate) {
+      const history = samples;
+      const expiryTimer = setTimeout(
+        () =>
+          setEta(
+            estimateChargingEta(history, level, activeSessionId, Date.now())
+          ),
+        Math.max(0, estimate.expiresAt - now + 1)
+      );
+      const countdownTimer =
+        fullAt === undefined
+          ? undefined
+          : setInterval(() => setNow(Date.now()), 60_000);
+      onCleanup(() => {
+        clearTimeout(expiryTimer);
+        if (countdownTimer) clearInterval(countdownTimer);
+      });
+    }
+  });
+
+  const duration = (minutes: number) => {
+    const hours = Math.floor(minutes / 60);
+    const remainder = minutes % 60;
+    return hours
+      ? `${hours} h ${String(remainder).padStart(2, "0")} min`
+      : `${minutes} min`;
+  };
+  const remainingMinutes = (fullAt: number) =>
+    Math.max(1, Math.ceil((fullAt - now()) / 60_000));
+  const timeAtFull = (fullAt: number) =>
+    new Intl.DateTimeFormat(getLocale(), {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(fullAt);
+
+  return (
+    <Show when={eta()}>
+      {(estimate) => (
+        <section
+          class="rounded-2xl border bg-card px-4 py-3 text-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <p class="font-medium">{m.device_isCharging()}</p>
+          <Show
+            when={estimate().fullAt}
+            fallback={
+              <p class="text-muted-foreground">{m.device_etaCalculating()}</p>
+            }
+          >
+            {(fullAt) => (
+              <>
+                <p class="text-muted-foreground">
+                  {m.device_etaRemaining({
+                    duration: duration(remainingMinutes(fullAt())),
+                  })}
+                </p>
+                <p class="text-muted-foreground">
+                  {m.device_etaAt({ time: timeAtFull(fullAt()) })}
+                </p>
+              </>
+            )}
+          </Show>
+        </section>
+      )}
+    </Show>
+  );
+};
+
 const CraftyLiveSession = (props: { children: JSX.Element }) => {
   const { state, derived } = useCrafty();
   return (
@@ -151,6 +269,7 @@ export const CraftyShell = (props: RouteSectionProps) => {
             },
           ]}
         >
+          <CraftyChargingEta />
           {props.children}
         </DeviceShell>
       </CraftyLiveSession>
