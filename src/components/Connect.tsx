@@ -381,6 +381,11 @@ export const Connect = () => {
                       : deviceLabel(deviceInfo()),
                 })}
           </p>
+          <Show when={knownDeviceLabel()}>
+            <Button variant="outline" class="w-full" onClick={connect}>
+              {m.connect_otherDevice()}
+            </Button>
+          </Show>
           <Button variant="outline" class="w-full" onClick={disconnect}>
             {m.common_cancel()}
           </Button>

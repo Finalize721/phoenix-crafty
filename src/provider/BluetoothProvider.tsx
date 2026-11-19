@@ -110,6 +110,11 @@ const isIOS = () =>
   navigator.userAgent.includes("iPad") ||
   navigator.userAgent.includes("WebBLE/1");
 
+const isAndroidChrome = () =>
+  typeof navigator !== "undefined" &&
+  /Android/.test(navigator.userAgent) &&
+  /Chrome\//.test(navigator.userAgent);
+
 const detectDeviceType = (deviceName: string): DeviceType => {
   if (deviceName.includes("S&B VOLCANO")) return DeviceType.VOLCANO;
   if (deviceName.includes("S&B VY")) return DeviceType.VENTY;
@@ -553,6 +558,20 @@ const createBluetoothMethods = () => {
     setConnectionState(ConnectionState.CONNECTION_FAILED);
     setConnectionError(unreachable);
   };
+
+  let autoConnectAttempted = false;
+  createEffect(() => {
+    if (
+      !isAndroidChrome() ||
+      autoConnectAttempted ||
+      !knownDevice() ||
+      connectionState() !== ConnectionState.NOT_CONNECTED
+    ) {
+      return;
+    }
+    autoConnectAttempted = true;
+    void connectKnownDevice();
+  });
 
   return {
     connect,
