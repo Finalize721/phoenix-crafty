@@ -157,6 +157,13 @@ const CraftyChargingEta = () => {
     (ReturnType<typeof estimateChargingEta> & { fullAt?: number }) | undefined
   >();
   const [now, setNow] = createSignal(Date.now());
+  const updateClock = () => setNow(Date.now());
+  const clockTimer = setInterval(updateClock, 60_000);
+  document.addEventListener("visibilitychange", updateClock);
+  onCleanup(() => {
+    clearInterval(clockTimer);
+    document.removeEventListener("visibilitychange", updateClock);
+  });
   let historyId: string | undefined;
   let sessionId: string | undefined;
   let samples: BatterySample[] = [];
@@ -194,13 +201,8 @@ const CraftyChargingEta = () => {
           ),
         Math.max(0, estimate.expiresAt - now + 1)
       );
-      const countdownTimer =
-        fullAt === undefined
-          ? undefined
-          : setInterval(() => setNow(Date.now()), 60_000);
       onCleanup(() => {
         clearTimeout(expiryTimer);
-        if (countdownTimer) clearInterval(countdownTimer);
       });
     }
   });
