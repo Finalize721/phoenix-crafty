@@ -81,6 +81,8 @@ const VentyVeazyLiveSession = (props: { children: JSX.Element }) => {
           reached: heating && (status?.setpointReached ?? false),
           ready: !!status,
           isCelsius: status?.isCelsius ?? true,
+          batteryLevel: status?.batteryLevel,
+          isCharging: status?.isCharging,
         };
       }}
     >

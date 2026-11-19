@@ -1,10 +1,16 @@
 /** App preferences for the "target reached" alert, stored per browser */
 const NOTIFY_KEY = "notifyTargetReached";
 const SOUND_KEY = "soundTargetReached";
+const BATTERY_NOTIFY_KEYS = {
+  88: "notifyBattery88",
+  99: "notifyBattery99",
+} as const;
 
-const readFlag = (key: string) => {
+export type BatteryNotificationThreshold = keyof typeof BATTERY_NOTIFY_KEYS;
+
+const readFlag = (key: string, defaultValue = false) => {
   try {
-    return localStorage.getItem(key) === "true";
+    return (localStorage.getItem(key) ?? String(defaultValue)) === "true";
   } catch {
     return false;
   }
@@ -38,6 +44,33 @@ export const setNotifyPreference = async (enabled: boolean) => {
   writeFlag(NOTIFY_KEY, enabled);
   return enabled && isNotificationSupported();
 };
+
+export const getBatteryNotifyPreference = (
+  threshold: BatteryNotificationThreshold
+) =>
+  readFlag(BATTERY_NOTIFY_KEYS[threshold], threshold === 99) &&
+  isNotificationSupported() &&
+  Notification.permission === "granted";
+
+export const setBatteryNotifyPreference = async (
+  threshold: BatteryNotificationThreshold,
+  enabled: boolean
+) => {
+  if (enabled && isNotificationSupported()) {
+    const permission =
+      Notification.permission === "default"
+        ? await Notification.requestPermission()
+        : Notification.permission;
+    enabled = permission === "granted";
+  }
+  writeFlag(BATTERY_NOTIFY_KEYS[threshold], enabled);
+  return enabled && isNotificationSupported();
+};
+
+export const crossedBatteryThresholds = (previous: number, current: number) =>
+  ([88, 99] as const).filter(
+    (threshold) => previous < threshold && current >= threshold
+  );
 
 export const getSoundPreference = () => readFlag(SOUND_KEY);
 
@@ -85,11 +118,15 @@ const playChime = () => {
   }
 };
 
-const showNotification = async (title: string, body: string) => {
+const showNotification = async (
+  title: string,
+  body: string,
+  tag = "target-reached"
+) => {
   const options: NotificationOptions = {
     body,
     icon: `${import.meta.env.BASE_URL}pwa-192x192.png`,
-    tag: "target-reached",
+    tag,
   };
   // Mobile Chrome only allows notifications through the service worker
   const registration = await navigator.serviceWorker?.getRegistration();
@@ -97,6 +134,22 @@ const showNotification = async (title: string, body: string) => {
     await registration.showNotification(title, options);
   } else {
     new Notification(title, options);
+  }
+};
+
+/** Battery charge alert while the app is in the background */
+export const alertBatteryReached = (
+  threshold: BatteryNotificationThreshold,
+  title: string,
+  body: string
+) => {
+  if (
+    getBatteryNotifyPreference(threshold) &&
+    document.visibilityState === "hidden"
+  ) {
+    showNotification(title, body, `battery-reached-${threshold}`).catch(
+      (error) => console.error("Showing the notification failed:", error)
+    );
   }
 };
 

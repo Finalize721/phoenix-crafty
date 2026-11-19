@@ -12,7 +12,11 @@ import { useWakeLock } from "../hooks/utils/useWakeLock";
 import { m } from "../paraglide/messages";
 import { convertCelsiusToFahrenheit } from "../utils/bluetoothUtils";
 import type { TemperatureSample } from "../utils/heatProgress";
-import { alertTargetReached } from "../utils/notify";
+import {
+  alertBatteryReached,
+  alertTargetReached,
+  crossedBatteryThresholds,
+} from "../utils/notify";
 import {
   type ActiveSession,
   finishSession,
@@ -36,6 +40,8 @@ export interface LiveReading {
   ready: boolean;
   /** The unit the device shows; °C if unset */
   isCelsius?: boolean;
+  batteryLevel?: number;
+  isCharging?: boolean;
 }
 
 export const LIVE_WINDOW_MS = 10 * 60 * 1000;
@@ -64,6 +70,7 @@ export const LiveSessionProvider = (props: {
   const isCelsius = () => props.reading().isCelsius ?? true;
   let active: ActiveSession | undefined;
   let previous: LiveReading | undefined;
+  let previousBatteryLevel: number | undefined;
 
   // Lives here rather than in the gauge, so it also fires on other tabs
   const alertWhenReached = (reading: LiveReading) => {
@@ -84,6 +91,28 @@ export const LiveSessionProvider = (props: {
         temperature: `${target} °${isCelsius() ? "C" : "F"}`,
       })
     );
+  };
+
+  const alertWhenBatteryReached = (reading: LiveReading) => {
+    const previousLevel = previousBatteryLevel;
+    previousBatteryLevel = reading.batteryLevel;
+    if (
+      previousLevel === undefined ||
+      reading.batteryLevel === undefined ||
+      reading.isCharging === false
+    ) {
+      return;
+    }
+    for (const threshold of crossedBatteryThresholds(
+      previousLevel,
+      reading.batteryLevel
+    )) {
+      alertBatteryReached(
+        threshold,
+        m.notify_batteryTitle(),
+        m.notify_batteryBody({ device, percentage: threshold })
+      );
+    }
   };
 
   const finish = (time: number) => {
@@ -133,7 +162,10 @@ export const LiveSessionProvider = (props: {
   createEffect(() => {
     const reading = props.reading();
     record(reading);
-    if (reading.ready) alertWhenReached(reading);
+    if (reading.ready) {
+      alertWhenReached(reading);
+      alertWhenBatteryReached(reading);
+    }
   });
   // Readings only arrive on change, so keep the curve moving
   const timer = setInterval(() => record(props.reading()), TICK_MS);

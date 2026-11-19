@@ -6,10 +6,13 @@ import {
   useEffects,
 } from "../provider/EffectsProvider";
 import { useToast } from "../provider/ToastProvider";
+import type { BatteryNotificationThreshold } from "../utils/notify";
 import {
+  getBatteryNotifyPreference,
   getNotifyPreference,
   getSoundPreference,
   isNotificationSupported,
+  setBatteryNotifyPreference,
   setNotifyPreference,
   setSoundPreference,
 } from "../utils/notify";
@@ -27,11 +30,28 @@ export const AppSettingsSection = () => {
   const showToast = useToast();
   const effects = useEffects();
   const [notify, setNotify] = createSignal(getNotifyPreference());
+  const [notifyBattery99, setNotifyBattery99] = createSignal(
+    getBatteryNotifyPreference(99)
+  );
+  const [notifyBattery88, setNotifyBattery88] = createSignal(
+    getBatteryNotifyPreference(88)
+  );
   const [sound, setSound] = createSignal(getSoundPreference());
 
   const toggleNotify = async (enabled: boolean) => {
     const effective = await setNotifyPreference(enabled);
     setNotify(effective);
+    if (enabled && !effective) {
+      showToast({ message: m.settings_notifyBlocked() });
+    }
+  };
+
+  const toggleBatteryNotify = async (
+    threshold: BatteryNotificationThreshold,
+    enabled: boolean
+  ) => {
+    const effective = await setBatteryNotifyPreference(threshold, enabled);
+    (threshold === 99 ? setNotifyBattery99 : setNotifyBattery88)(effective);
     if (enabled && !effective) {
       showToast({ message: m.settings_notifyBlocked() });
     }
@@ -72,6 +92,28 @@ export const AppSettingsSection = () => {
         checked={notify()}
         disabled={!isNotificationSupported()}
         onChange={toggleNotify}
+      />
+      <SettingSwitch
+        label={m.settings_notifyBattery99()}
+        description={
+          isNotificationSupported()
+            ? m.settings_notifyBatteryHint()
+            : m.settings_notifyUnsupported()
+        }
+        checked={notifyBattery99()}
+        disabled={!isNotificationSupported()}
+        onChange={(enabled) => toggleBatteryNotify(99, enabled)}
+      />
+      <SettingSwitch
+        label={m.settings_notifyBattery88()}
+        description={
+          isNotificationSupported()
+            ? m.settings_notifyBatteryHint()
+            : m.settings_notifyUnsupported()
+        }
+        checked={notifyBattery88()}
+        disabled={!isNotificationSupported()}
+        onChange={(enabled) => toggleBatteryNotify(88, enabled)}
       />
       <SettingSwitch
         label={m.settings_sound()}

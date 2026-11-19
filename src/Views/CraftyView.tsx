@@ -102,6 +102,7 @@ const CraftyLiveSession = (props: { children: JSX.Element }) => {
         heating: derived.isHeaterActive(),
         reached: derived.isHeaterActive() && derived.isSetpointReached(),
         ready: state.loaded,
+        batteryLevel: state.loaded ? state.batteryLevel : undefined,
       })}
     >
       {props.children}
