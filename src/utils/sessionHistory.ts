@@ -1,3 +1,8 @@
+import {
+  getHistoryRetentionDays,
+  isWithinHistoryRetention,
+} from "./historyRetention";
+
 /** One reading of a connected device, temperatures in °C */
 export interface SessionReading {
   time: number;
@@ -56,8 +61,6 @@ const maxTemp = (a: number | null, b: number | null) => {
   if (!isPlausibleTemp(b)) return a;
   return a === null ? b : Math.max(a, b);
 };
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const startSession = (reading: SessionReading): ActiveSession => ({
   startedAt: reading.time,
@@ -133,19 +136,32 @@ export const finishSession = (
 };
 
 export interface HistorySummary {
-  sessionsLastWeek: number;
-  secondsLastWeek: number;
+  sessionsInPeriod: number;
+  secondsInPeriod: number;
   averageHeatUpSeconds: number | null;
 }
 
-export const summarize = (sessions: Session[], now: number): HistorySummary => {
-  const lastWeek = sessions.filter((s) => now - s.startedAt < 7 * DAY_MS);
-  const heatUps = lastWeek
+export const retainSessions = (
+  sessions: Session[],
+  now = Date.now(),
+  days = getHistoryRetentionDays()
+) =>
+  sessions.filter((session) =>
+    isWithinHistoryRetention(session.startedAt, now, days)
+  );
+
+export const summarize = (
+  sessions: Session[],
+  now: number,
+  days = getHistoryRetentionDays()
+): HistorySummary => {
+  const retained = retainSessions(sessions, now, days);
+  const heatUps = retained
     .map((s) => s.heatUpSeconds)
     .filter((seconds): seconds is number => seconds !== null);
   return {
-    sessionsLastWeek: lastWeek.length,
-    secondsLastWeek: lastWeek.reduce((sum, s) => sum + s.durationSeconds, 0),
+    sessionsInPeriod: retained.length,
+    secondsInPeriod: retained.reduce((sum, s) => sum + s.durationSeconds, 0),
     averageHeatUpSeconds:
       heatUps.length === 0
         ? null
@@ -168,8 +184,16 @@ export const sanitizeSession = (session: Session): Session =>
       };
 
 /** Newest first, capped so storage stays small */
-export const addSession = (sessions: Session[], session: Session) =>
-  [session, ...sessions].slice(0, MAX_STORED_SESSIONS);
+export const addSession = (
+  sessions: Session[],
+  session: Session,
+  now = Date.now(),
+  days = getHistoryRetentionDays()
+) =>
+  retainSessions([session, ...sessions], now, days).slice(
+    0,
+    MAX_STORED_SESSIONS
+  );
 
 const csvField = (value: string | number | null) => {
   const text = value === null ? "" : String(value);

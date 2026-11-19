@@ -1,7 +1,16 @@
+import Bell from "lucide-solid/icons/bell";
+import BellRing from "lucide-solid/icons/bell-ring";
 import Zap from "lucide-solid/icons/zap";
-import { Show } from "solid-js";
+import { createSignal, Show } from "solid-js";
 import { cn } from "../lib/utils";
 import { m } from "../paraglide/messages";
+import { useToast } from "../provider/ToastProvider";
+import {
+  getBatteryNotifyPreference,
+  isNotificationSupported,
+  setBatteryNotifyPreference,
+} from "../utils/notify";
+import { Button } from "./ui/button";
 
 /** Battery level for the header, with a bolt while charging */
 export const BatteryChip = (props: {
@@ -42,6 +51,58 @@ export const BatteryChip = (props: {
           <Zap class="size-3.5 fill-primary text-primary" />
         </Show>
         {props.level} %
+      </div>
+    </Show>
+  );
+};
+
+/** Battery level and its quick 99% notification toggle for the device header. */
+export const BatteryHeaderStatus = (props: {
+  level: number | undefined;
+  charging?: boolean;
+}) => {
+  const [notifyAt99, setNotifyAt99] = createSignal(
+    getBatteryNotifyPreference(99)
+  );
+  const [pending, setPending] = createSignal(false);
+  const showToast = useToast();
+
+  const toggleNotification = async () => {
+    if (pending()) return;
+    const enabled = !notifyAt99();
+    setPending(true);
+    try {
+      const effective = await setBatteryNotifyPreference(99, enabled);
+      setNotifyAt99(effective);
+      if (enabled && !effective) {
+        showToast({ message: m.settings_notifyBlocked() });
+      }
+    } catch (error) {
+      console.error("Updating the battery notification failed:", error);
+      showToast({ message: m.settings_notifyBlocked() });
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Show when={props.level !== undefined}>
+      <div class="flex shrink-0 items-center gap-1">
+        <Button
+          variant="outline"
+          size="icon"
+          class={cn("text-muted-foreground", notifyAt99() && "text-primary")}
+          aria-label={m.settings_notifyBattery99()}
+          title={`${m.settings_notifyBattery99()}. ${m.settings_notifyBatteryHint()}`}
+          aria-pressed={notifyAt99()}
+          disabled={!isNotificationSupported() || pending()}
+          onClick={toggleNotification}
+        >
+          <Show when={notifyAt99()} fallback={<Bell />}>
+            <BellRing />
+          </Show>
+        </Button>
+        <BatteryChip level={props.level} charging={props.charging} />
       </div>
     </Show>
   );

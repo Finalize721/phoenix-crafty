@@ -13,7 +13,7 @@ import {
   onCleanup,
   Show,
 } from "solid-js";
-import { BatteryChip } from "../components/BatteryChip";
+import { BatteryHeaderStatus } from "../components/BatteryChip";
 import { ShutdownTime } from "../components/crafty/ShutdownTime";
 import { Temperature } from "../components/crafty/Temperature";
 import { DeviceShell } from "../components/DeviceShell";
@@ -140,7 +140,11 @@ export const CraftyView: Component = () => {
 
 const CraftyBattery = () => {
   const { state } = useCrafty();
-  return <BatteryChip level={state.loaded ? state.batteryLevel : undefined} />;
+  return (
+    <BatteryHeaderStatus
+      level={state.loaded ? state.batteryLevel : undefined}
+    />
+  );
 };
 
 const CraftyChargingEta = () => {

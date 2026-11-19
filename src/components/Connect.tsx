@@ -13,7 +13,7 @@ import { useBluetooth } from "../provider/BluetoothProvider";
 import { buildRoute } from "../routes";
 import { ConnectionState, DeviceType } from "../utils/uuids";
 import { decodeWorkflow, getPendingWorkflowCode } from "../utils/workflowShare";
-import { deviceLabel, ThemeToggle } from "./AppHeader";
+import { CaffeineToggle, deviceLabel } from "./AppHeader";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -186,7 +186,7 @@ export const Connect = () => {
         class="pointer-events-none absolute top-24 left-1/2 size-[440px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,var(--glow),transparent)] opacity-0 fx:opacity-50 fx-strong:opacity-90"
       />
       <div class="relative flex justify-end px-5 pt-[max(1.125rem,env(safe-area-inset-top))]">
-        <ThemeToggle />
+        <CaffeineToggle />
       </div>
 
       <main class="relative mx-auto flex w-full max-w-lg flex-1 flex-col items-center gap-5 px-5 pt-3 pb-10">

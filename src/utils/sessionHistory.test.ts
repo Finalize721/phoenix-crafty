@@ -4,6 +4,7 @@ import {
   downsample,
   finishSession,
   MAX_STORED_SESSIONS,
+  retainSessions,
   type Session,
   type SessionReading,
   sanitizeSession,
@@ -97,7 +98,7 @@ describe("sessionHistory", () => {
     expect(result[9]).toBe(999);
   });
 
-  it("summarizes the last week", () => {
+  it("summarizes sessions within the selected retention period", () => {
     const now = 30 * 24 * 60 * 60 * 1000;
     const summary = summarize(
       [
@@ -105,20 +106,34 @@ describe("sessionHistory", () => {
         session({ startedAt: now - 2000, heatUpSeconds: 60 }),
         session({ startedAt: 0, heatUpSeconds: null }),
       ],
-      now
+      now,
+      7
     );
     expect(summary).toEqual({
-      sessionsLastWeek: 2,
-      secondsLastWeek: 900,
+      sessionsInPeriod: 2,
+      secondsInPeriod: 900,
       averageHeatUpSeconds: 90,
     });
+  });
+
+  it("retains sessions up to the configured day limit", () => {
+    const now = 40 * 24 * 60 * 60 * 1000;
+    const retained = retainSessions(
+      [
+        session({ id: "inside", startedAt: now - 29 * 24 * 60 * 60 * 1000 }),
+        session({ id: "outside", startedAt: now - 31 * 24 * 60 * 60 * 1000 }),
+      ],
+      now,
+      30
+    );
+    expect(retained.map(({ id }) => id)).toEqual(["inside"]);
   });
 
   it("keeps the newest sessions first and caps the list", () => {
     const many = Array.from({ length: MAX_STORED_SESSIONS }, (_, i) =>
       session({ id: String(i) })
     );
-    const result = addSession(many, session({ id: "new" }));
+    const result = addSession(many, session({ id: "new" }), 0, 30);
     expect(result).toHaveLength(MAX_STORED_SESSIONS);
     expect(result[0].id).toBe("new");
   });

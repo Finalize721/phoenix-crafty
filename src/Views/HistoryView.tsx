@@ -26,6 +26,7 @@ import { m } from "../paraglide/messages";
 import { getLocale } from "../paraglide/runtime";
 import { useHistory } from "../provider/HistoryProvider";
 import { useTemperatureFormat } from "../provider/LiveSessionProvider";
+import { getHistoryRetentionDays } from "../utils/historyRetention";
 import {
   type Session,
   sessionsToCsv,
@@ -165,7 +166,9 @@ export const HistoryView = () => {
   const history = useHistory();
   const [confirmClear, setConfirmClear] = createSignal(false);
 
-  const summary = createMemo(() => summarize(history.sessions(), Date.now()));
+  const summary = createMemo(() =>
+    summarize(history.sessions(), Date.now(), getHistoryRetentionDays())
+  );
 
   const days = createMemo(() => {
     const groups: { key: string; label: string; sessions: Session[] }[] = [];
@@ -223,14 +226,16 @@ export const HistoryView = () => {
 
       <section class="flex flex-col gap-2">
         <h2 class="mx-1 font-medium text-muted-foreground text-xs uppercase tracking-[0.08em]">
-          {m.history_lastWeek()}
+          {getHistoryRetentionDays() === 1
+            ? m.history_lastDay()
+            : m.history_lastDays({ days: getHistoryRetentionDays() })}
         </h2>
         <div class="grid grid-cols-3 gap-2.5">
           <StatTile label={m.history_sessions()}>
-            {summary().sessionsLastWeek}
+            {summary().sessionsInPeriod}
           </StatTile>
           <StatTile label={m.history_heatingTime()}>
-            {formatCompact(summary().secondsLastWeek)}
+            {formatCompact(summary().secondsInPeriod)}
           </StatTile>
           <StatTile label={m.history_averageHeatUp()}>
             {summary().averageHeatUpSeconds === null

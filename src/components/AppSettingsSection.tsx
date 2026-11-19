@@ -6,7 +6,11 @@ import {
   useEffects,
 } from "../provider/EffectsProvider";
 import { useToast } from "../provider/ToastProvider";
-import type { BatteryNotificationThreshold } from "../utils/notify";
+import {
+  getHistoryRetentionDays,
+  MAX_HISTORY_RETENTION_DAYS,
+  setHistoryRetentionDays,
+} from "../utils/historyRetention";
 import {
   getBatteryNotifyPreference,
   getNotifyPreference,
@@ -16,12 +20,7 @@ import {
   setNotifyPreference,
   setSoundPreference,
 } from "../utils/notify";
-import {
-  getScreenAwakePreference,
-  isScreenWakeLockSupported,
-  setScreenAwakePreference,
-} from "../utils/screenWakeLock";
-import { SettingSwitch, SettingsSection } from "./Settings";
+import { SettingRow, SettingSwitch, SettingsSection } from "./Settings";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 
 const effectsLabels: Record<EffectsLevel, () => string> = {
@@ -35,13 +34,13 @@ export const AppSettingsSection = () => {
   const showToast = useToast();
   const effects = useEffects();
   const [notify, setNotify] = createSignal(getNotifyPreference());
-  const [notifyBattery99, setNotifyBattery99] = createSignal(
-    getBatteryNotifyPreference(99)
-  );
   const [notifyBattery88, setNotifyBattery88] = createSignal(
     getBatteryNotifyPreference(88)
   );
   const [sound, setSound] = createSignal(getSoundPreference());
+  const [retentionInput, setRetentionInput] = createSignal(
+    String(getHistoryRetentionDays())
+  );
 
   const toggleNotify = async (enabled: boolean) => {
     const effective = await setNotifyPreference(enabled);
@@ -51,14 +50,28 @@ export const AppSettingsSection = () => {
     }
   };
 
-  const toggleBatteryNotify = async (
-    threshold: BatteryNotificationThreshold,
-    enabled: boolean
-  ) => {
-    const effective = await setBatteryNotifyPreference(threshold, enabled);
-    (threshold === 99 ? setNotifyBattery99 : setNotifyBattery88)(effective);
+  const toggleBatteryNotify88 = async (enabled: boolean) => {
+    const effective = await setBatteryNotifyPreference(88, enabled);
+    setNotifyBattery88(effective);
     if (enabled && !effective) {
       showToast({ message: m.settings_notifyBlocked() });
+    }
+  };
+
+  const updateRetentionInput = (value: string) => {
+    setRetentionInput(value);
+    if (!/^\d+$/.test(value)) return;
+    setHistoryRetentionDays(Number(value));
+  };
+
+  const restoreRetentionInput = () => {
+    const days = Number(retentionInput());
+    if (
+      !Number.isInteger(days) ||
+      days < 1 ||
+      days > MAX_HISTORY_RETENTION_DAYS
+    ) {
+      setRetentionInput(String(getHistoryRetentionDays()));
     }
   };
 
@@ -99,17 +112,6 @@ export const AppSettingsSection = () => {
         onChange={toggleNotify}
       />
       <SettingSwitch
-        label={m.settings_notifyBattery99()}
-        description={
-          isNotificationSupported()
-            ? m.settings_notifyBatteryHint()
-            : m.settings_notifyUnsupported()
-        }
-        checked={notifyBattery99()}
-        disabled={!isNotificationSupported()}
-        onChange={(enabled) => toggleBatteryNotify(99, enabled)}
-      />
-      <SettingSwitch
         label={m.settings_notifyBattery88()}
         description={
           isNotificationSupported()
@@ -118,7 +120,7 @@ export const AppSettingsSection = () => {
         }
         checked={notifyBattery88()}
         disabled={!isNotificationSupported()}
-        onChange={(enabled) => toggleBatteryNotify(88, enabled)}
+        onChange={toggleBatteryNotify88}
       />
       <SettingSwitch
         label={m.settings_sound()}
@@ -129,17 +131,27 @@ export const AppSettingsSection = () => {
           setSound(enabled);
         }}
       />
-      <SettingSwitch
-        label={m.settings_screenAwake()}
-        description={
-          isScreenWakeLockSupported()
-            ? m.settings_screenAwakeHint()
-            : m.settings_screenAwakeUnsupported()
-        }
-        checked={getScreenAwakePreference()}
-        disabled={!isScreenWakeLockSupported()}
-        onChange={setScreenAwakePreference}
-      />
+      <SettingRow
+        label={m.settings_historyRetention()}
+        description={m.settings_historyRetentionHint({
+          max: MAX_HISTORY_RETENTION_DAYS,
+        })}
+      >
+        <div class="flex shrink-0 items-center gap-2">
+          <input
+            type="number"
+            min="1"
+            max={MAX_HISTORY_RETENTION_DAYS}
+            step="1"
+            class="h-9 w-20 rounded-lg border bg-background px-2 text-right tabular-nums"
+            aria-label={m.settings_historyRetention()}
+            value={retentionInput()}
+            onInput={(event) => updateRetentionInput(event.currentTarget.value)}
+            onBlur={restoreRetentionInput}
+          />
+          <span class="text-muted-foreground text-sm">{m.settings_days()}</span>
+        </div>
+      </SettingRow>
     </SettingsSection>
   );
 };

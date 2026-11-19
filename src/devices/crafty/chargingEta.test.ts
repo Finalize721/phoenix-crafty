@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_HISTORY_RETENTION_DAYS,
+  setHistoryRetentionDays,
+} from "../../utils/historyRetention";
+import {
   type BatterySample,
   estimateChargingEta,
+  readChargingHistory,
   recordBatterySample,
 } from "./chargingEta";
 
@@ -71,6 +76,40 @@ describe("Crafty charging ETA", () => {
         remainingMinutes: 55,
       });
     } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("uses the configured retention period for saved battery readings", () => {
+    const storedSamples = [
+      {
+        level: 50,
+        time: 40 * 24 * 60 * 60 * 1000 - 29 * 24 * 60 * 60 * 1000,
+        sessionId: "recent",
+      },
+      {
+        level: 40,
+        time: 40 * 24 * 60 * 60 * 1000 - 31 * 24 * 60 * 60 * 1000,
+        sessionId: "older",
+      },
+    ];
+    const storage = new Map<string, string>([
+      ["craftyChargingHistory:crafty", JSON.stringify(storedSamples)],
+      ["craftyChargingHistory:other", JSON.stringify(storedSamples)],
+    ]);
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+
+    try {
+      const now = 40 * 24 * 60 * 60 * 1000;
+      setHistoryRetentionDays(30);
+      expect(readChargingHistory("crafty", now)).toHaveLength(1);
+      setHistoryRetentionDays(45);
+      expect(readChargingHistory("other", now)).toHaveLength(2);
+    } finally {
+      setHistoryRetentionDays(DEFAULT_HISTORY_RETENTION_DAYS);
       vi.unstubAllGlobals();
     }
   });

@@ -1,3 +1,5 @@
+import { isWithinHistoryRetention } from "../../utils/historyRetention";
+
 export interface BatterySample {
   level: number;
   time: number;
@@ -11,7 +13,6 @@ export interface ChargingEta {
 
 const STORAGE_KEY = "craftyChargingHistory";
 const MAX_SAMPLES = 120;
-const MAX_HISTORY_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const CHARGING_WINDOW_MS = 30 * 60 * 1000;
 const MAX_RATE_INTERVAL_MS = 60 * 60 * 1000;
 const MIN_RATE_INTERVAL_MS = 60 * 1000;
@@ -32,6 +33,15 @@ const rateBand = (level: number) => (level >= 90 ? 2 : level >= 80 ? 1 : 0);
 const storageKey = (deviceId: string) =>
   `${STORAGE_KEY}:${encodeURIComponent(deviceId)}`;
 
+const storeHistory = (deviceId: string, history: BatterySample[]) => {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(storageKey(deviceId), JSON.stringify(history));
+  } catch {
+    // The current session can still estimate charging without persistence.
+  }
+};
+
 export const readChargingHistory = (
   deviceId: string,
   now = Date.now()
@@ -42,18 +52,19 @@ export const readChargingHistory = (
       localStorage.getItem(storageKey(deviceId)) || "[]"
     );
     if (!Array.isArray(stored)) return [];
-    return stored.filter(
+    const retained = stored.filter(
       (sample): sample is BatterySample =>
         sample !== null &&
         typeof sample === "object" &&
         Number.isFinite(sample.level) &&
         sample.level >= 0 &&
         sample.level <= 100 &&
-        Number.isFinite(sample.time) &&
+        isWithinHistoryRetention(sample.time, now) &&
         typeof sample.sessionId === "string" &&
-        sample.time <= now &&
-        now - sample.time <= MAX_HISTORY_AGE_MS
+        Number.isFinite(sample.time)
     );
+    if (retained.length !== stored.length) storeHistory(deviceId, retained);
+    return retained;
   } catch {
     return [];
   }
@@ -66,14 +77,11 @@ const appendSample = (
   time: number,
   sessionId: string
 ) => {
-  const next = [...history, { level, time, sessionId }].slice(-MAX_SAMPLES);
-  if (typeof localStorage !== "undefined") {
-    try {
-      localStorage.setItem(storageKey(deviceId), JSON.stringify(next));
-    } catch {
-      // The current session can still estimate charging without persistence.
-    }
-  }
+  const next = [
+    ...history.filter((sample) => isWithinHistoryRetention(sample.time, time)),
+    { level, time, sessionId },
+  ].slice(-MAX_SAMPLES);
+  storeHistory(deviceId, next);
   return next;
 };
 
@@ -86,10 +94,15 @@ export const recordBatterySample = (
   history = readChargingHistory(deviceId, time)
 ) => {
   if (!Number.isFinite(level) || level < 0 || level > 100) return [];
-  const latest = history[history.length - 1];
-  if (latest?.level === level && latest.sessionId === sessionId) return history;
-  if (latest && time <= latest.time) return history;
-  return appendSample(history, deviceId, level, time, sessionId);
+  const retained = history.filter((sample) =>
+    isWithinHistoryRetention(sample.time, time)
+  );
+  if (retained.length !== history.length) storeHistory(deviceId, retained);
+  const latest = retained[retained.length - 1];
+  if (latest?.level === level && latest.sessionId === sessionId)
+    return retained;
+  if (latest && time <= latest.time) return retained;
+  return appendSample(retained, deviceId, level, time, sessionId);
 };
 
 /** Crafty has no charging flag, so a recent same-session rise establishes it. */

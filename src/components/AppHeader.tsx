@@ -1,13 +1,17 @@
 import Bluetooth from "lucide-solid/icons/bluetooth";
 import BluetoothOff from "lucide-solid/icons/bluetooth-off";
+import Coffee from "lucide-solid/icons/coffee";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
-import Moon from "lucide-solid/icons/moon";
 import Power from "lucide-solid/icons/power";
-import Sun from "lucide-solid/icons/sun";
 import { type JSX, Match, Show, Switch } from "solid-js";
+import { useWakeLock } from "../hooks/utils/useWakeLock";
 import { m } from "../paraglide/messages";
 import { type DeviceInfo, useBluetooth } from "../provider/BluetoothProvider";
-import { useDarkMode } from "../provider/DarkModeProvider";
+import {
+  getScreenAwakePreference,
+  isScreenWakeLockSupported,
+  setScreenAwakePreference,
+} from "../utils/screenWakeLock";
 import { ConnectionState, DeviceType } from "../utils/uuids";
 import {
   AlertDialog,
@@ -31,20 +35,32 @@ const DEVICE_TYPE_LABELS: Partial<Record<DeviceType, string>> = {
 export const deviceLabel = (device: Pick<DeviceInfo, "type" | "name">) =>
   DEVICE_TYPE_LABELS[device.type] ?? device.name;
 
-export const ThemeToggle = () => {
-  const { isDarkMode, toggleDarkMode } = useDarkMode();
+export const CaffeineToggle = () => {
+  const { connectionState } = useBluetooth();
+  useWakeLock(
+    () =>
+      getScreenAwakePreference() &&
+      connectionState() !== ConnectionState.CONNECTED
+  );
+
   return (
     <Button
       variant="outline"
       size="icon"
-      class="text-muted-foreground"
-      aria-label={m.settings_darkMode()}
-      aria-pressed={isDarkMode()}
-      onClick={() => toggleDarkMode(!isDarkMode())}
+      class={
+        getScreenAwakePreference() ? "text-primary" : "text-muted-foreground"
+      }
+      aria-label={m.settings_screenAwake()}
+      title={
+        isScreenWakeLockSupported()
+          ? m.settings_screenAwakeHint()
+          : m.settings_screenAwakeUnsupported()
+      }
+      aria-pressed={getScreenAwakePreference()}
+      disabled={!isScreenWakeLockSupported()}
+      onClick={() => setScreenAwakePreference(!getScreenAwakePreference())}
     >
-      <Show when={isDarkMode()} fallback={<Moon />}>
-        <Sun />
-      </Show>
+      <Coffee />
     </Button>
   );
 };
@@ -87,7 +103,7 @@ interface AppHeaderProps {
   trailing?: JSX.Element;
 }
 
-/** Device name, connection status, theme toggle and disconnect */
+/** Device name, connection status, quick controls and disconnect */
 export const AppHeader = (props: AppHeaderProps) => {
   const { connectionState, deviceInfo } = useBluetooth();
 
@@ -124,7 +140,7 @@ export const AppHeader = (props: AppHeaderProps) => {
         </div>
       </div>
       {props.trailing}
-      <ThemeToggle />
+      <CaffeineToggle />
       <Show when={isConnected()}>
         <DisconnectButton />
       </Show>

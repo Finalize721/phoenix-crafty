@@ -1,10 +1,10 @@
-import { ThemeStudio } from "./ThemeStudio";
 import type { RouteSectionProps } from "@solidjs/router";
+import { ColorPalette } from "./ColorPalette";
 
 export const Layout = (props: RouteSectionProps) => {
   return (
     <div class="min-h-dvh">
-      <ThemeStudio />
+      <ColorPalette />
       {props.children}
       <footer class="fan-footer">
         Independent fan project · Based on{" "}

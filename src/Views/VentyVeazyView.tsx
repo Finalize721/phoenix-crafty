@@ -4,7 +4,7 @@ import History from "lucide-solid/icons/rotate-ccw-clock";
 import SlidersHorizontal from "lucide-solid/icons/sliders-horizontal";
 import Thermometer from "lucide-solid/icons/thermometer";
 import { type Component, createEffect, type JSX, Show } from "solid-js";
-import { BatteryChip } from "../components/BatteryChip";
+import { BatteryHeaderStatus } from "../components/BatteryChip";
 import { DeviceShell } from "../components/DeviceShell";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -54,7 +54,7 @@ export const VentyVeazyView: Component = () => {
 const VentyVeazyBattery = () => {
   const { state } = useVentyVeazy();
   return (
-    <BatteryChip
+    <BatteryHeaderStatus
       level={state.status?.batteryLevel}
       charging={state.status?.isCharging ?? false}
     />

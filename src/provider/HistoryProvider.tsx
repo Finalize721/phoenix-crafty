@@ -1,6 +1,7 @@
 import {
   type Accessor,
   createContext,
+  createEffect,
   createMemo,
   type JSX,
   useContext,
@@ -8,6 +9,7 @@ import {
 import { useIndexedDB } from "../hooks/utils/useIndexedDB";
 import {
   addSession,
+  retainSessions,
   type Session,
   sanitizeSession,
 } from "../utils/sessionHistory";
@@ -25,7 +27,14 @@ const HistoryContext = createContext<HistoryContextType>();
 /** Recorded heater sessions of all devices, kept in IndexedDB */
 export const HistoryProvider = (props: { children: JSX.Element }) => {
   const [stored, setSessions] = useIndexedDB<Session[]>(STORAGE_KEY, []);
-  const sessions = createMemo(() => stored().map(sanitizeSession));
+  const sessions = createMemo(() =>
+    retainSessions(stored().map(sanitizeSession))
+  );
+  createEffect(() => {
+    const current = stored();
+    const retained = retainSessions(current);
+    if (retained.length !== current.length) setSessions(retained);
+  });
   return (
     <HistoryContext.Provider
       value={{
