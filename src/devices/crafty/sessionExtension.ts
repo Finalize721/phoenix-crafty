@@ -1,4 +1,8 @@
 /** Bounded experiment: reapply the supported 300-second setting, never power on. */
+export const SESSION_EXTENSION_DURATIONS = [5, 10, 15] as const;
+export type SessionExtensionDuration =
+  (typeof SESSION_EXTENSION_DURATIONS)[number];
+
 export const createSessionExtension = (io: {
   eligible: () => boolean;
   readRemaining: () => Promise<number | null>;
@@ -72,7 +76,7 @@ export const createSessionExtension = (io: {
     }
   };
   return {
-    start() {
+    start(durationMinutes: SessionExtensionDuration = 5) {
       stop();
       if (!io.eligible()) {
         io.report(
@@ -81,8 +85,11 @@ export const createSessionExtension = (io: {
         );
         return;
       }
-      deadline = now() + 300_000;
-      io.report(true, "Versuch aktiv. Erster Timer-Test in 30 Sekunden.");
+      deadline = now() + durationMinutes * 60_000;
+      io.report(
+        true,
+        `Versuch für ${durationMinutes} Minuten aktiv. Erster Timer-Test in 30 Sekunden.`
+      );
       schedule(generation);
     },
     stop,

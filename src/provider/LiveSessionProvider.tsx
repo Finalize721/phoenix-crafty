@@ -17,6 +17,7 @@ import {
   alertTargetReached,
   crossedBatteryThresholds,
 } from "../utils/notify";
+import { getScreenAwakePreference } from "../utils/screenWakeLock";
 import {
   type ActiveSession,
   finishSession,
@@ -157,7 +158,7 @@ export const LiveSessionProvider = (props: {
   };
 
   // Keep the screen on while the device heats, on every tab
-  useWakeLock(() => props.reading().heating);
+  useWakeLock(() => props.reading().heating || getScreenAwakePreference());
 
   createEffect(() => {
     const reading = props.reading();

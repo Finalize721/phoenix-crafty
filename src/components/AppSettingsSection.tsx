@@ -16,6 +16,11 @@ import {
   setNotifyPreference,
   setSoundPreference,
 } from "../utils/notify";
+import {
+  getScreenAwakePreference,
+  isScreenWakeLockSupported,
+  setScreenAwakePreference,
+} from "../utils/screenWakeLock";
 import { SettingSwitch, SettingsSection } from "./Settings";
 import { ToggleGroup, ToggleGroupItem } from "./ui/toggle-group";
 
@@ -123,6 +128,17 @@ export const AppSettingsSection = () => {
           setSoundPreference(enabled);
           setSound(enabled);
         }}
+      />
+      <SettingSwitch
+        label={m.settings_screenAwake()}
+        description={
+          isScreenWakeLockSupported()
+            ? m.settings_screenAwakeHint()
+            : m.settings_screenAwakeUnsupported()
+        }
+        checked={getScreenAwakePreference()}
+        disabled={!isScreenWakeLockSupported()}
+        onChange={setScreenAwakePreference}
       />
     </SettingsSection>
   );

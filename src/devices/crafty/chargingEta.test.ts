@@ -33,6 +33,22 @@ describe("Crafty charging ETA", () => {
     });
   });
 
+  it("uses measured high-battery rates when charging slows near full", () => {
+    const samples: BatterySample[] = [
+      { level: 50, time: 0, sessionId: "session" },
+      { level: 60, time: 10 * 60_000, sessionId: "session" },
+      { level: 70, time: 20 * 60_000, sessionId: "session" },
+      { level: 90, time: 40 * 60_000, sessionId: "session" },
+      { level: 95, time: 55 * 60_000, sessionId: "session" },
+      { level: 96, time: 58 * 60_000, sessionId: "session" },
+    ];
+
+    expect(estimateChargingEta(samples, 96, "session", 58 * 60_000)).toEqual({
+      expiresAt: 88 * 60_000,
+      remainingMinutes: 12,
+    });
+  });
+
   it("uses saved charge rates after a live rise in a new session", () => {
     const storage = new Map<string, string>();
     vi.stubGlobal("localStorage", {
@@ -52,7 +68,7 @@ describe("Crafty charging ETA", () => {
       expect(samples).toHaveLength(5);
       expect(estimateChargingEta(samples, 81, "new", 65 * 60_000)).toEqual({
         expiresAt: 95 * 60_000,
-        remainingMinutes: 19,
+        remainingMinutes: 55,
       });
     } finally {
       vi.unstubAllGlobals();

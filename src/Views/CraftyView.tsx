@@ -8,6 +8,7 @@ import {
   type Component,
   createEffect,
   createSignal,
+  For,
   type JSX,
   onCleanup,
   Show,
@@ -22,6 +23,10 @@ import {
   readChargingHistory,
   recordBatterySample,
 } from "../devices/crafty/chargingEta";
+import {
+  SESSION_EXTENSION_DURATIONS,
+  type SessionExtensionDuration,
+} from "../devices/crafty/sessionExtension";
 import { m } from "../paraglide/messages";
 import { getLocale } from "../paraglide/runtime";
 import { useBluetooth } from "../provider/BluetoothProvider";
@@ -35,10 +40,13 @@ export const CraftyView: Component = () => {
     actions,
     derived,
     isCraftyPlus,
+    state,
     extension,
     session,
     extensionEligible,
   } = useCrafty();
+  const [extensionMinutes, setExtensionMinutes] =
+    createSignal<SessionExtensionDuration>(5);
 
   // Keep the screen on while the device heats
 
@@ -49,32 +57,61 @@ export const CraftyView: Component = () => {
       <Show when={isCraftyPlus}>
         <section
           class="rounded-2xl border bg-card p-4 space-y-2"
-          aria-label="Sitzung verlängern"
+          aria-label={m.crafty_extendSession()}
         >
-          <h2 class="font-medium text-sm">
-            Sitzung verlängern · Experimentell
-          </h2>
+          <h2 class="font-medium text-sm">{m.crafty_extendSession()}</h2>
           <p class="text-xs text-muted-foreground">
-            5 Minuten lang alle 30 Sekunden einen Timer-Reset versuchen. Danach
-            läuft der 5-Minuten-Timer aus. Nur bei sichtbarer App und
-            bestehender Verbindung. Stelle die Abschaltzeit vorher auf 5
-            Minuten.
+            {m.crafty_extensionLimit()}
           </p>
+          <label class="flex items-center justify-between gap-3 text-sm">
+            <span>{m.crafty_extensionDuration()}</span>
+            <select
+              class="h-9 rounded-lg border bg-background px-2"
+              value={extensionMinutes()}
+              disabled={extension().active}
+              onChange={(event) => {
+                switch (event.currentTarget.value) {
+                  case "10":
+                    setExtensionMinutes(10);
+                    break;
+                  case "15":
+                    setExtensionMinutes(15);
+                    break;
+                  default:
+                    setExtensionMinutes(5);
+                }
+              }}
+            >
+              <For each={SESSION_EXTENSION_DURATIONS}>
+                {(minutes) => <option value={minutes}>{minutes} min</option>}
+              </For>
+            </select>
+          </label>
+          <Show
+            when={state.loaded && !extension().active && !extensionEligible()}
+          >
+            <p class="text-xs text-muted-foreground">
+              {m.crafty_extensionRequirements()}
+            </p>
+          </Show>
           <button
             type="button"
-            class="rounded-lg border px-3 py-2 text-sm disabled:opacity-40"
-            disabled={!extension().active && !extensionEligible()}
+            class="rounded-lg border px-3 py-2 text-sm"
             onClick={() =>
-              extension().active ? session.stop() : session.start()
+              extension().active
+                ? session.stop()
+                : session.start(extensionMinutes())
             }
           >
             {extension().active
-              ? "Verlängerung stoppen"
-              : "Verlängerung testen"}
+              ? m.crafty_extensionStop()
+              : m.crafty_extensionStart()}
           </button>
-          <p class="text-xs text-muted-foreground" role="status">
-            {extension().message}
-          </p>
+          <Show when={extension().message}>
+            <p class="text-xs text-muted-foreground" role="status">
+              {extension().message}
+            </p>
+          </Show>
         </section>
       </Show>
       {/* Find My Device - only Crafty+ */}

@@ -10,12 +10,24 @@ export interface ChargingEta {
 }
 
 const STORAGE_KEY = "craftyChargingHistory";
-const MAX_SAMPLES = 40;
-const MAX_HISTORY_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_SAMPLES = 120;
+const MAX_HISTORY_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const CHARGING_WINDOW_MS = 30 * 60 * 1000;
 const MAX_RATE_INTERVAL_MS = 60 * 60 * 1000;
 const MIN_RATE_INTERVAL_MS = 60 * 1000;
 const RATE_SAMPLE_COUNT = 8;
+
+type RateSample = { level: number; percentPerHour: number };
+
+const median = (values: number[]) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+};
+
+const rateBand = (level: number) => (level >= 90 ? 2 : level >= 80 ? 1 : 0);
 
 const storageKey = (deviceId: string) =>
   `${STORAGE_KEY}:${encodeURIComponent(deviceId)}`;
@@ -102,7 +114,7 @@ export const estimateChargingEta = (
     return;
   }
 
-  const rates: number[] = [];
+  const rates: RateSample[] = [];
   for (let index = 1; index < samples.length; index++) {
     const before = samples[index - 1];
     const after = samples[index];
@@ -114,21 +126,37 @@ export const estimateChargingEta = (
       elapsed >= MIN_RATE_INTERVAL_MS &&
       elapsed <= MAX_RATE_INTERVAL_MS
     ) {
-      rates.push((increase * 60 * 60 * 1000) / elapsed);
+      rates.push({
+        level: after.level,
+        percentPerHour: (increase * 60 * 60 * 1000) / elapsed,
+      });
     }
   }
 
-  const recentRates = rates.slice(-RATE_SAMPLE_COUNT).sort((a, b) => a - b);
+  const recentRates = rates
+    .slice(-RATE_SAMPLE_COUNT)
+    .map((sample) => sample.percentPerHour);
   const expiresAt = latest.time + CHARGING_WINDOW_MS;
   if (recentRates.length < 2) return { expiresAt };
 
-  const middle = Math.floor(recentRates.length / 2);
-  const rate =
-    recentRates.length % 2
-      ? recentRates[middle]
-      : (recentRates[middle - 1] + recentRates[middle]) / 2;
+  const overallRate = median(recentRates);
+  const ratesByBand: number[][] = [[], [], []];
+  for (const sample of rates) {
+    ratesByBand[rateBand(sample.level)].push(sample.percentPerHour);
+  }
+  const bandRates = ratesByBand.map((bandRates) =>
+    bandRates.length > 0
+      ? median(bandRates.slice(-RATE_SAMPLE_COUNT))
+      : overallRate
+  );
+  let remainingMinutes = 0;
+  for (let percent = Math.floor(level); percent < 100; percent++) {
+    const fraction = Math.min(1, percent + 1 - level);
+    const rate = bandRates[rateBand(percent)];
+    remainingMinutes += (fraction * 60) / rate;
+  }
   return {
     expiresAt,
-    remainingMinutes: Math.ceil(((100 - level) / rate) * 60),
+    remainingMinutes: Math.ceil(remainingMinutes),
   };
 };

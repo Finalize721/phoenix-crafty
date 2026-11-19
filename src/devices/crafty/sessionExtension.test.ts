@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { createSessionExtension } from "./sessionExtension";
+import {
+  createSessionExtension,
+  SESSION_EXTENSION_DURATIONS,
+} from "./sessionExtension";
+
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
@@ -15,17 +19,20 @@ const setup = () => {
   const session = createSessionExtension(io);
   return { io, session };
 };
-it("confirms resets every 30 seconds, ending attempts at five minutes", async () => {
-  const { io, session } = setup();
-  let reads = 0;
-  io.readRemaining.mockImplementation(async () => (++reads % 2 ? 270 : 300));
-  session.start();
-  await vi.advanceTimersByTimeAsync(300_000);
-  expect(io.reapply).toHaveBeenCalledTimes(9);
-  expect(io.report.mock.lastCall?.[0]).toBe(false);
-  await vi.advanceTimersByTimeAsync(600_000);
-  expect(io.reapply).toHaveBeenCalledTimes(9);
-});
+it.each(SESSION_EXTENSION_DURATIONS)(
+  "confirms timer resets for a %i-minute extension",
+  async (duration) => {
+    const { io, session } = setup();
+    let reads = 0;
+    io.readRemaining.mockImplementation(async () => (++reads % 2 ? 270 : 300));
+    session.start(duration);
+    await vi.advanceTimersByTimeAsync(duration * 60_000);
+    expect(io.reapply).toHaveBeenCalledTimes(duration * 2 - 1);
+    expect(io.report.mock.lastCall?.[0]).toBe(false);
+    await vi.advanceTimersByTimeAsync(600_000);
+    expect(io.reapply).toHaveBeenCalledTimes(duration * 2 - 1);
+  }
+);
 it("stops if the official setting write does not reset the timer", async () => {
   const { io, session } = setup();
   io.readRemaining.mockResolvedValueOnce(270).mockResolvedValueOnce(269);
