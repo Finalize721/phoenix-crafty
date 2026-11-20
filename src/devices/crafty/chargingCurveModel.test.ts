@@ -8,192 +8,246 @@ import {
 const minute = (value: number) => value * 60_000;
 const point = (
   level: number,
-  minutes: number,
+  at: number,
   sessionId: string,
-  breakBefore = false
-): BatteryCurveSample => ({
-  level,
-  time: minute(minutes),
-  sessionId,
-  ...(breakBefore ? { breakBefore: true } : {}),
-});
+  flags: Partial<
+    Pick<BatteryCurveSample, "breakBefore" | "continuousSincePrevious">
+  > = {}
+): BatteryCurveSample => ({ level, time: minute(at), sessionId, ...flags });
 
-const historical = [
-  point(50, 0, "old"),
-  point(60, 10, "old"),
-  point(65, 15, "old"),
-  point(75, 25, "old"),
-  point(80, 30, "old"),
-  point(85, 38, "old"),
-  point(90, 45, "old"),
-  point(93, 51, "old"),
-  point(95, 55, "old"),
-  point(97, 62, "old"),
-  point(100, 70, "old"),
+const completed99 = [
+  point(60, 0, "old"),
+  point(70, 10, "old"),
+  point(80, 20, "old"),
+  point(90, 32, "old"),
+  point(95, 40, "old"),
+  point(99, 48, "old"),
 ];
 
-describe("empirical charging curve estimator", () => {
-  it("uses historical time from the current level to observed full", () => {
-    const current = [
-      point(80, 100, "new"),
-      point(85, 105, "new"),
-      point(90, 115, "new"),
-    ];
-    const prediction = predictChargingCurve(
-      [...historical, ...current],
-      90,
-      "new",
-      minute(115)
-    );
-    expect(prediction).toMatchObject({
-      source: "history",
-      historicalRunCount: 1,
-      remainingMinutes: 25,
-    });
-  });
-
-  it("gives each completed run one vote when taking the median", () => {
-    const fast = [
-      point(80, 200, "fast"),
-      point(85, 205, "fast"),
-      point(90, 210, "fast"),
-      point(95, 215, "fast"),
-      point(100, 220, "fast"),
-    ];
-    const slow = [
-      point(80, 300, "slow"),
-      point(84, 309, "slow"),
-      point(88, 318, "slow"),
-      point(90, 325, "slow"),
-      point(93, 337, "slow"),
-      point(95, 343, "slow"),
-      point(96, 349, "slow"),
-      point(97, 353, "slow"),
-      point(98, 357, "slow"),
-      point(100, 365, "slow"),
-    ];
-    const current = [point(88, 400, "new"), point(90, 410, "new")];
+describe("Crafty+ historical ETA to 99%", () => {
+  it("uses the historical curve on the first fresh reading after reconnect", () => {
     expect(
       predictChargingCurve(
-        [...fast, ...slow, ...current],
-        90,
-        "new",
-        minute(410)
-      )
-    ).toMatchObject({ historicalRunCount: 2, remainingMinutes: 25 });
-  });
-
-  it("does not infer completion across a disconnected gap", () => {
-    const incomplete = [
-      point(50, 0, "old"),
-      point(70, 10, "old"),
-      point(90, 20, "old"),
-      point(100, 100, "old"),
-    ];
-    const current = [
-      point(85, 200, "new"),
-      point(87, 205, "new"),
-      point(90, 210, "new"),
-    ];
-    expect(
-      predictChargingCurve([...incomplete, ...current], 90, "new", minute(210))
-        ?.source
-    ).toBe("live");
-  });
-
-  it("splits at explicit visibility and reconnect boundaries", () => {
-    const samples = [
-      point(90, 0, "old"),
-      point(94, 4, "old"),
-      point(100, 8, "old", true),
-    ];
-    expect(splitChargingRuns(samples)).toHaveLength(2);
-  });
-
-  it("accepts a verified long plateau without requiring duplicate samples", () => {
-    const completed = [
-      point(80, 0, "old"),
-      point(90, 8, "old"),
-      point(95, 18, "old"),
-      { ...point(100, 38, "old"), continuousSincePrevious: true },
-    ];
-    const current = [point(85, 100, "new"), point(90, 107, "new")];
-    expect(
-      predictChargingCurve([...completed, ...current], 90, "new", minute(107))
-    ).toMatchObject({ source: "history", remainingMinutes: 30 });
-  });
-
-  it("does not treat an observed 99% as a confirmed 100%", () => {
-    const partial = [
-      point(60, 0, "old"),
-      point(90, 30, "old"),
-      point(99, 50, "old"),
-    ];
-    const current = [
-      point(80, 100, "new"),
-      point(85, 105, "new"),
-      point(90, 110, "new"),
-    ];
-    expect(
-      predictChargingCurve([...partial, ...current], 90, "new", minute(110))
-        ?.source
-    ).toBe("live");
-  });
-
-  it("adapts historical estimates conservatively to current speed", () => {
-    const current = [
-      point(80, 100, "new"),
-      point(85, 107, "new"),
-      point(88, 114, "new"),
-      point(90, 120, "new"),
-    ];
-    expect(
-      predictChargingCurve([...historical, ...current], 90, "new", minute(120))
-    ).toMatchObject({ source: "history", adaptedToLive: true });
-    expect(
-      predictChargingCurve([...historical, ...current], 90, "new", minute(120))
-        ?.remainingMinutes
-    ).toBe(28);
-  });
-
-  it("requires a fresh rise and enough data for a live fallback", () => {
-    expect(
-      predictChargingCurve(
-        [...historical, point(80, 100, "new")],
+        [...completed99, point(80, 100, "new")],
         80,
         "new",
         minute(100)
       )
-    ).toBeUndefined();
-    const short = [point(80, 100, "new"), point(82, 104, "new")];
-    expect(predictChargingCurve(short, 82, "new", minute(104))).toBeUndefined();
+    ).toMatchObject({
+      source: "history",
+      targetLevel: 99,
+      historicalRunCount: 1,
+      chargingObserved: false,
+      provisional: true,
+      remainingMinutes: 28,
+    });
   });
 
-  it("drops stale readings", () => {
-    const current = [point(80, 100, "new"), point(90, 110, "new")];
+  it("estimates remaining time when history ends at 99%", () => {
     expect(
-      predictChargingCurve([...historical, ...current], 90, "new", minute(145))
+      predictChargingCurve(
+        [...completed99, point(85, 100, "new")],
+        85,
+        "new",
+        minute(100)
+      )?.remainingMinutes
+    ).toBe(22);
+  });
+
+  it("interpolates between observed battery levels", () => {
+    expect(
+      predictChargingCurve(
+        [...completed99, point(87, 100, "new")],
+        87,
+        "new",
+        minute(100)
+      )?.remainingMinutes
+    ).toBe(20);
+  });
+
+  it("treats 99% as complete without predicting 100%", () => {
+    expect(
+      predictChargingCurve(
+        [...completed99, point(99, 100, "new")],
+        99,
+        "new",
+        minute(100)
+      )
+    ).toBeUndefined();
+    expect(
+      predictChargingCurve(
+        [...completed99, point(100, 100, "new")],
+        100,
+        "new",
+        minute(100)
+      )
     ).toBeUndefined();
   });
 
-  it("does not predict levels below the available historical curve", () => {
-    const current = [
-      point(50, 100, "new"),
-      point(55, 105, "new"),
-      point(60, 110, "new"),
+  it("uses history after live progress and marks charging observed", () => {
+    expect(
+      predictChargingCurve(
+        [...completed99, point(80, 100, "new"), point(81, 103, "new")],
+        81,
+        "new",
+        minute(103)
+      )
+    ).toMatchObject({
+      source: "history",
+      chargingObserved: true,
+      targetLevel: 99,
+    });
+  });
+
+  it("does not learn a target arrival after an interruption", () => {
+    const interrupted = [
+      point(95, 0, "old"),
+      point(98, 4, "old"),
+      point(99, 5, "old", { breakBefore: true }),
     ];
     expect(
-      predictChargingCurve([...historical, ...current], 60, "new", minute(110))
-        ?.source
-    ).toBe("history");
-    const lower = [
-      point(10, 200, "other"),
-      point(15, 205, "other"),
-      point(20, 210, "other"),
+      predictChargingCurve(
+        [...interrupted, point(97, 100, "new")],
+        97,
+        "new",
+        minute(100)
+      )
+    ).toBeUndefined();
+  });
+
+  it("rejects a target reading after a long unobserved gap", () => {
+    const interrupted = [
+      point(60, 0, "old"),
+      point(80, 10, "old"),
+      point(99, 100, "old"),
     ];
     expect(
-      predictChargingCurve([...historical, ...lower], 20, "other", minute(210))
-        ?.source
-    ).toBe("live");
+      predictChargingCurve(
+        [...interrupted, point(81, 110, "new")],
+        81,
+        "new",
+        minute(110)
+      )
+    ).toBeUndefined();
+  });
+
+  it("uses near-complete fragments provisionally without inventing target time", () => {
+    const partial = [
+      point(75, 0, "old"),
+      point(85, 10, "old"),
+      point(90, 16, "old"),
+      point(95, 24, "old"),
+      point(98, 30, "old"),
+    ];
+    expect(
+      predictChargingCurve(
+        [...partial, point(80, 100, "new")],
+        80,
+        "new",
+        minute(100)
+      )
+    ).toMatchObject({ source: "history", provisional: true });
+  });
+
+  it("uses reliable fragments from a run interrupted before the near-full segment", () => {
+    const partial = [
+      point(60, 0, "old"),
+      point(70, 10, "old"),
+      point(80, 20, "old"),
+      point(95, 100, "old", { breakBefore: true }),
+      point(99, 105, "old"),
+    ];
+    expect(
+      predictChargingCurve(
+        [...partial, point(75, 200, "new")],
+        75,
+        "new",
+        minute(200)
+      )
+    ).toMatchObject({ source: "history", provisional: true });
+  });
+
+  it("does not extrapolate early-only history to 99%", () => {
+    const partial = [
+      point(20, 0, "old"),
+      point(30, 10, "old"),
+      point(40, 20, "old"),
+      point(50, 30, "old"),
+    ];
+    expect(
+      predictChargingCurve(
+        [...partial, point(30, 100, "new")],
+        30,
+        "new",
+        minute(100)
+      )
+    ).toBeUndefined();
+  });
+
+  it("allows a provisional live fallback after a 1% rise in two minutes", () => {
+    expect(
+      predictChargingCurve(
+        [point(80, 100, "new"), point(81, 103, "new")],
+        81,
+        "new",
+        minute(103)
+      )
+    ).toMatchObject({
+      source: "live",
+      chargingObserved: true,
+      provisional: true,
+      targetLevel: 99,
+    });
+  });
+
+  it("rejects a one-minute jump as insufficient live evidence", () => {
+    expect(
+      predictChargingCurve(
+        [point(80, 100, "new"), point(81, 101, "new")],
+        81,
+        "new",
+        minute(101)
+      )
+    ).toBeUndefined();
+  });
+
+  it("does not advertise a stale current measurement", () => {
+    expect(
+      predictChargingCurve(
+        [...completed99, point(80, 100, "new")],
+        80,
+        "new",
+        minute(131)
+      )
+    ).toBeUndefined();
+  });
+
+  it("splits samples at explicit interruption boundaries", () => {
+    expect(
+      splitChargingRuns([
+        point(90, 0, "old"),
+        point(98, 4, "old"),
+        point(99, 5, "old", { breakBefore: true }),
+      ])
+    ).toHaveLength(2);
+  });
+
+  it("uses legacy 100% runs as a curve only through 99%", () => {
+    const old100 = [
+      point(60, 0, "legacy"),
+      point(70, 10, "legacy"),
+      point(80, 20, "legacy"),
+      point(90, 30, "legacy"),
+      point(95, 36, "legacy"),
+      point(100, 45, "legacy"),
+    ];
+    expect(
+      predictChargingCurve(
+        [...old100, point(80, 100, "new")],
+        80,
+        "new",
+        minute(100)
+      )
+    ).toMatchObject({ targetLevel: 99, remainingMinutes: 24 });
   });
 });

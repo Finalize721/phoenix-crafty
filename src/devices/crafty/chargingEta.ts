@@ -1,37 +1,55 @@
 import { isWithinHistoryRetention } from "../../utils/historyRetention";
-import { predictChargingCurve } from "./chargingCurveModel";
+import {
+  type BatteryCurveSample,
+  type CurvePrediction,
+  predictChargingCurve,
+} from "./chargingCurveModel";
 
-export interface BatterySample {
-  level: number;
-  time: number;
-  sessionId: string;
-  breakBefore?: boolean;
-  continuousSincePrevious?: boolean;
-}
+export type BatterySample = BatteryCurveSample;
 
-export interface ChargingEta {
+export interface ChargingEta extends CurvePrediction {
   expiresAt: number;
-  remainingMinutes?: number;
-  source?: "history" | "live";
 }
 
 const STORAGE_KEY = "craftyChargingHistory";
-const MAX_SAMPLES = 2500;
-const CHARGING_WINDOW_MS = 30 * 60 * 1000;
-const MAX_RATE_INTERVAL_MS = 60 * 60 * 1000;
+const MAX_SAMPLES = 2_500;
+const MAX_ESTIMATE_AGE_MS = 30 * 60_000;
 
 const storageKey = (deviceId: string) =>
   `${STORAGE_KEY}:${encodeURIComponent(deviceId)}`;
 
-const storeHistory = (deviceId: string, history: BatterySample[]) => {
+const storeHistory = (deviceId: string, history: BatterySample[]): void => {
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(storageKey(deviceId), JSON.stringify(history));
   } catch {
-    // The current session can still estimate charging without persistence.
+    // Storage may be restricted, but current-session estimation still works.
   }
 };
 
+const isBatterySample = (
+  sample: unknown,
+  now: number
+): sample is BatterySample => {
+  if (!sample || typeof sample !== "object") return false;
+  const point = sample as Record<string, unknown>;
+  return (
+    typeof point.level === "number" &&
+    Number.isFinite(point.level) &&
+    point.level >= 0 &&
+    point.level <= 100 &&
+    typeof point.time === "number" &&
+    Number.isFinite(point.time) &&
+    isWithinHistoryRetention(point.time, now) &&
+    typeof point.sessionId === "string" &&
+    (point.breakBefore === undefined ||
+      typeof point.breakBefore === "boolean") &&
+    (point.continuousSincePrevious === undefined ||
+      typeof point.continuousSincePrevious === "boolean")
+  );
+};
+
+/** Read existing history from the same per-device key and legacy format. */
 export const readChargingHistory = (
   deviceId: string,
   now = Date.now()
@@ -42,21 +60,9 @@ export const readChargingHistory = (
       localStorage.getItem(storageKey(deviceId)) || "[]"
     );
     if (!Array.isArray(stored)) return [];
-    const retained = stored.filter(
-      (sample): sample is BatterySample =>
-        sample !== null &&
-        typeof sample === "object" &&
-        Number.isFinite(sample.level) &&
-        sample.level >= 0 &&
-        sample.level <= 100 &&
-        isWithinHistoryRetention(sample.time, now) &&
-        typeof sample.sessionId === "string" &&
-        Number.isFinite(sample.time) &&
-        (sample.breakBefore === undefined ||
-          typeof sample.breakBefore === "boolean") &&
-        (sample.continuousSincePrevious === undefined ||
-          typeof sample.continuousSincePrevious === "boolean")
-    );
+    const retained = stored
+      .filter((sample) => isBatterySample(sample, now))
+      .slice(-MAX_SAMPLES);
     if (retained.length !== stored.length) storeHistory(deviceId, retained);
     return retained;
   } catch {
@@ -64,77 +70,67 @@ export const readChargingHistory = (
   }
 };
 
-const appendSample = (
-  history: BatterySample[],
-  deviceId: string,
-  level: number,
-  time: number,
-  sessionId: string,
-  continuity: Pick<
-    BatterySample,
-    "breakBefore" | "continuousSincePrevious"
-  > = {}
-) => {
-  const next = [
-    ...history.filter((sample) => isWithinHistoryRetention(sample.time, time)),
-    { level, time, sessionId, ...continuity },
-  ].slice(-MAX_SAMPLES);
-  storeHistory(deviceId, next);
-  return next;
-};
-
-/** Records a connection's starting level or a subsequent battery change. */
+/**
+ * Persist genuine battery readings. Pass continuity flags only when supported
+ * by observed visibility and BLE connection state.
+ */
 export const recordBatterySample = (
   deviceId: string,
   level: number,
   time = Date.now(),
   sessionId: string,
-  history = readChargingHistory(deviceId, time),
-  continuity: Pick<
-    BatterySample,
-    "breakBefore" | "continuousSincePrevious"
-  > = {}
-) => {
-  if (!Number.isFinite(level) || level < 0 || level > 100) return [];
-  const retained = history.filter((sample) =>
-    isWithinHistoryRetention(sample.time, time)
-  );
-  if (retained.length !== history.length) storeHistory(deviceId, retained);
+  history: BatterySample[] = readChargingHistory(deviceId, time),
+  flags: Pick<BatterySample, "breakBefore" | "continuousSincePrevious"> = {}
+): BatterySample[] => {
+  if (
+    !Number.isFinite(level) ||
+    level < 0 ||
+    level > 100 ||
+    !Number.isFinite(time)
+  ) {
+    return history;
+  }
+  const retained = history.filter((sample) => isBatterySample(sample, time));
   const latest = retained[retained.length - 1];
-  if (latest?.level === level && latest.sessionId === sessionId)
-    return retained;
   if (latest && time <= latest.time) return retained;
-  return appendSample(retained, deviceId, level, time, sessionId, continuity);
+  if (
+    latest?.level === level &&
+    latest.sessionId === sessionId &&
+    !flags.breakBefore
+  ) {
+    return retained;
+  }
+  const next = [
+    ...retained,
+    {
+      level,
+      time,
+      sessionId,
+      ...(flags.breakBefore ? { breakBefore: true } : {}),
+      ...(flags.continuousSincePrevious === true && !flags.breakBefore
+        ? { continuousSincePrevious: true }
+        : {}),
+    },
+  ].slice(-MAX_SAMPLES);
+  storeHistory(deviceId, next);
+  return next;
 };
 
-/** Crafty has no charging flag, so a recent same-session rise establishes it. */
+/** Historical estimates do not establish that the device is charging. */
 export const estimateChargingEta = (
   samples: BatterySample[],
   level: number,
   sessionId: string,
   now = Date.now()
 ): ChargingEta | undefined => {
-  const previous = samples[samples.length - 2];
-  const latest = samples[samples.length - 1];
-  if (
-    level >= 100 ||
-    !previous ||
-    !latest ||
-    previous.sessionId !== sessionId ||
-    latest.sessionId !== sessionId ||
-    latest.level <= previous.level ||
-    latest.time - previous.time > MAX_RATE_INTERVAL_MS ||
-    now - latest.time > CHARGING_WINDOW_MS
-  ) {
-    return;
-  }
-
-  const expiresAt = latest.time + CHARGING_WINDOW_MS;
   const prediction = predictChargingCurve(samples, level, sessionId, now);
-  if (!prediction) return { expiresAt };
+  if (!prediction) return undefined;
+  const latest = [...samples]
+    .reverse()
+    .find((sample) => sample.sessionId === sessionId);
+  if (!latest) return undefined;
   return {
-    expiresAt,
-    remainingMinutes: prediction.remainingMinutes,
-    source: prediction.source,
+    ...prediction,
+    expiresAt: latest.time + MAX_ESTIMATE_AGE_MS,
   };
 };

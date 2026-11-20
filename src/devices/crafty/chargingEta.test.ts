@@ -10,125 +10,117 @@ import {
   recordBatterySample,
 } from "./chargingEta";
 
-describe("Crafty charging ETA", () => {
-  it("waits for recent battery increases before showing charging", () => {
-    const samples: BatterySample[] = [
-      { level: 50, time: 0, sessionId: "session" },
-      { level: 51, time: 5 * 60_000, sessionId: "session" },
-    ];
+const minute = (value: number) => value * 60_000;
 
-    expect(estimateChargingEta(samples, 51, "session", 5 * 60_000)).toEqual({
-      expiresAt: 35 * 60_000,
-    });
-    expect(
-      estimateChargingEta(samples, 51, "session", 36 * 60_000)
-    ).toBeUndefined();
-  });
+const completed99 = (): BatterySample[] => [
+  { level: 60, time: minute(0), sessionId: "old" },
+  { level: 70, time: minute(10), sessionId: "old" },
+  { level: 80, time: minute(20), sessionId: "old" },
+  { level: 90, time: minute(32), sessionId: "old" },
+  { level: 95, time: minute(40), sessionId: "old" },
+  { level: 99, time: minute(48), sessionId: "old" },
+];
 
-  it("uses the measured live slope when no completed curve exists", () => {
-    const samples: BatterySample[] = [
-      { level: 20, time: 0, sessionId: "session" },
-      { level: 30, time: 10 * 60_000, sessionId: "session" },
-      { level: 40, time: 20 * 60_000, sessionId: "session" },
-    ];
+describe("Crafty charging ETA integration", () => {
+  it("uses saved history immediately from the first fresh reading", () => {
+    const history = completed99();
+    const samples = recordBatterySample(
+      "crafty",
+      80,
+      minute(100),
+      "new",
+      history
+    );
 
-    expect(
-      estimateChargingEta(samples, 40, "session", 20 * 60_000)
-    ).toMatchObject({
-      expiresAt: 50 * 60_000,
-      remainingMinutes: 60,
-      source: "live",
-    });
-  });
-
-  it("estimates charge speed across frequent battery updates", () => {
-    const samples: BatterySample[] = Array.from({ length: 21 }, (_, level) => ({
-      level,
-      time: level * 30_000,
-      sessionId: "session",
-    }));
-    const now = 20 * 30_000;
-
-    expect(estimateChargingEta(samples, 20, "session", now)).toMatchObject({
-      expiresAt: now + 30 * 60_000,
-      remainingMinutes: 40,
-      source: "live",
+    expect(estimateChargingEta(samples, 80, "new", minute(100))).toMatchObject({
+      source: "history",
+      targetLevel: 99,
+      remainingMinutes: 28,
+      provisional: true,
+      chargingObserved: false,
+      expiresAt: minute(130),
     });
   });
 
-  it("uses measured high-battery rates when charging slows near full", () => {
-    const samples: BatterySample[] = [
-      { level: 50, time: 0, sessionId: "session" },
-      { level: 60, time: 10 * 60_000, sessionId: "session" },
-      { level: 70, time: 20 * 60_000, sessionId: "session" },
-      { level: 90, time: 40 * 60_000, sessionId: "session" },
-      {
-        level: 95,
-        time: 55 * 60_000,
-        sessionId: "session",
-        continuousSincePrevious: true,
-      },
-      {
-        level: 96,
-        time: 58 * 60_000,
-        sessionId: "session",
-        continuousSincePrevious: true,
-      },
-    ];
-
-    expect(
-      estimateChargingEta(samples, 96, "session", 58 * 60_000)
-    ).toMatchObject({
-      expiresAt: 88 * 60_000,
-      remainingMinutes: 12,
-      source: "live",
-    });
-  });
-
-  it("does not mistake an incomplete historical session for a full curve", () => {
-    const storage = new Map<string, string>();
+  it("preserves the existing per-device storage key and legacy sample format", () => {
+    const storage = new Map<string, string>([
+      ["craftyChargingHistory:crafty", JSON.stringify(completed99())],
+    ]);
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => storage.set(key, value),
     });
     try {
-      recordBatterySample("crafty", 50, 0, "old");
-      recordBatterySample("crafty", 60, 10 * 60_000, "old");
-      recordBatterySample("crafty", 70, 20 * 60_000, "old");
-      const baseline = recordBatterySample("crafty", 80, 60 * 60_000, "new");
+      const history = readChargingHistory("crafty", minute(100));
+      expect(history).toHaveLength(6);
+      expect(history[0]).not.toHaveProperty("breakBefore");
+      const samples = recordBatterySample(
+        "crafty",
+        80,
+        minute(100),
+        "new",
+        history
+      );
       expect(
-        estimateChargingEta(baseline, 80, "new", 60 * 60_000)
-      ).toBeUndefined();
-      const samples = recordBatterySample("crafty", 81, 65 * 60_000, "new");
-
-      expect(samples).toHaveLength(5);
-      expect(estimateChargingEta(samples, 81, "new", 65 * 60_000)).toEqual({
-        expiresAt: 95 * 60_000,
+        estimateChargingEta(samples, 80, "new", minute(100))
+      ).toMatchObject({
+        targetLevel: 99,
+        source: "history",
+        chargingObserved: false,
       });
+      expect(storage.has("craftyChargingHistory:crafty")).toBe(true);
     } finally {
       vi.unstubAllGlobals();
     }
   });
 
-  it("uses a completed locally saved curve after a current-session rise", () => {
-    const samples: BatterySample[] = [
-      { level: 50, time: 0, sessionId: "old" },
-      { level: 60, time: 10 * 60_000, sessionId: "old" },
-      { level: 70, time: 20 * 60_000, sessionId: "old" },
-      { level: 80, time: 30 * 60_000, sessionId: "old" },
-      { level: 90, time: 40 * 60_000, sessionId: "old" },
-      { level: 95, time: 50 * 60_000, sessionId: "old" },
-      { level: 100, time: 60 * 60_000, sessionId: "old" },
-      { level: 80, time: 2 * 60 * 60_000, sessionId: "new" },
-      { level: 85, time: 2 * 60 * 60_000 + 5 * 60_000, sessionId: "new" },
-      { level: 90, time: 2 * 60 * 60_000 + 10 * 60_000, sessionId: "new" },
-    ];
+  it("appends a same-level reading after an interruption boundary", () => {
+    const first = recordBatterySample("crafty", 80, minute(100), "session", []);
+    const resumed = recordBatterySample(
+      "crafty",
+      80,
+      minute(110),
+      "session",
+      first,
+      { breakBefore: true }
+    );
 
+    expect(resumed).toHaveLength(2);
+    expect(resumed[1]).toMatchObject({
+      level: 80,
+      breakBefore: true,
+    });
+  });
+
+  it("treats 99% as complete and never predicts a 100% ETA", () => {
     expect(
-      estimateChargingEta(samples, 90, "new", 2 * 60 * 60_000 + 10 * 60_000)
-    ).toMatchObject({
-      remainingMinutes: 20,
-      source: "history",
+      estimateChargingEta(
+        [...completed99(), { level: 99, time: minute(100), sessionId: "new" }],
+        99,
+        "new",
+        minute(100)
+      )
+    ).toBeUndefined();
+    expect(
+      estimateChargingEta(
+        [...completed99(), { level: 100, time: minute(100), sessionId: "new" }],
+        100,
+        "new",
+        minute(100)
+      )
+    ).toBeUndefined();
+  });
+
+  it("marks the live fallback as provisional and charging-observed", () => {
+    const samples = [
+      { level: 80, time: minute(100), sessionId: "new" },
+      { level: 81, time: minute(102), sessionId: "new" },
+    ];
+    expect(estimateChargingEta(samples, 81, "new", minute(102))).toMatchObject({
+      source: "live",
+      targetLevel: 99,
+      provisional: true,
+      chargingObserved: true,
     });
   });
 

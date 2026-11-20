@@ -12,6 +12,7 @@ import {
   type JSX,
   onCleanup,
   Show,
+  untrack,
 } from "solid-js";
 import { BatteryHeaderStatus } from "../components/BatteryChip";
 import { ShutdownTime } from "../components/crafty/ShutdownTime";
@@ -162,6 +163,7 @@ const CraftyChargingEta = () => {
   let historyId: string | undefined;
   let sessionId: string | undefined;
   let samples: BatterySample[] = [];
+  let lastProcessedReadingId: number | undefined;
   let breakBeforeNextSample = false;
   let continuityValid = false;
   let wasConnected = connectionState() === ConnectionState.CONNECTED;
@@ -177,7 +179,9 @@ const CraftyChargingEta = () => {
     time: number
   ) => {
     const estimate = estimateChargingEta(history, level, activeSessionId, time);
-    const latest = history[history.length - 1];
+    const latest = [...history]
+      .reverse()
+      .find((sample) => sample.sessionId === activeSessionId);
     const fullAt =
       estimate?.remainingMinutes === undefined || !latest
         ? undefined
@@ -214,18 +218,28 @@ const CraftyChargingEta = () => {
 
   createEffect(() => {
     const connected = connectionState() === ConnectionState.CONNECTED;
-    if (!connected || !wasConnected) markDiscontinuity();
+    if (!connected) {
+      markDiscontinuity();
+      setEta(undefined);
+    } else if (!wasConnected) {
+      markDiscontinuity();
+      sessionId = crypto.randomUUID();
+    }
     wasConnected = connected;
   });
 
   createEffect(() => {
     const level = state.batteryLevel;
-    const connected = connectionState() === ConnectionState.CONNECTED;
+    const readingId = state.batteryReadingId;
+    const readingTime = state.batteryReadingAt;
     const id = deviceInfo().serialNumber || knownDevice()?.id;
-    if (!state.loaded || !isCraftyPlus || !id) {
+    if (readingId === lastProcessedReadingId) return;
+    if (!state.loaded || !isCraftyPlus || !id || readingTime === undefined) {
       setEta(undefined);
       return;
     }
+    const connected = untrack(connectionState) === ConnectionState.CONNECTED;
+    if (!connected) return;
 
     if (historyId !== id) {
       historyId = id;
@@ -236,7 +250,7 @@ const CraftyChargingEta = () => {
     }
     const activeSessionId = sessionId ?? crypto.randomUUID();
     sessionId = activeSessionId;
-    const now = Date.now();
+    const now = readingTime;
     const visible = document.visibilityState === "visible";
     const previousSample = samples[samples.length - 1];
     const nextSamples = recordBatterySample(
@@ -265,6 +279,7 @@ const CraftyChargingEta = () => {
     } else if (!connected || !visible) {
       continuityValid = false;
     }
+    lastProcessedReadingId = readingId;
 
     const estimate = calculateEta(samples, level, activeSessionId, now);
     if (estimate) {
@@ -295,40 +310,57 @@ const CraftyChargingEta = () => {
     }).format(fullAt);
 
   return (
-    <Show when={eta()}>
-      {(estimate) => (
-        <section
-          class="rounded-2xl border bg-card px-4 py-3 text-sm"
-          role="status"
-          aria-live="polite"
-        >
-          <p class="font-medium">{m.device_isCharging()}</p>
-          <Show when={estimate().source === "live"}>
-            <p class="text-xs text-muted-foreground">
-              Live-Schätzung · vorläufig
-            </p>
-          </Show>
-          <Show
-            when={estimate().fullAt}
-            fallback={
-              <p class="text-muted-foreground">{m.device_etaCalculating()}</p>
-            }
-          >
-            {(fullAt) => (
-              <>
-                <p class="text-muted-foreground">
-                  {m.device_etaRemaining({
-                    duration: duration(remainingMinutes(fullAt())),
-                  })}
-                </p>
-                <p class="text-muted-foreground">
-                  {m.device_etaAt({ time: timeAtFull(fullAt()) })}
-                </p>
-              </>
-            )}
-          </Show>
-        </section>
-      )}
+    <Show
+      when={state.loaded && isCraftyPlus && state.batteryLevel >= 99}
+      fallback={
+        <Show when={eta()}>
+          {(estimate) => (
+            <section
+              class="rounded-2xl border bg-card px-4 py-3 text-sm"
+              role="status"
+              aria-live="polite"
+            >
+              <p class="font-medium">
+                {estimate().chargingObserved
+                  ? m.device_isCharging()
+                  : "Historische Ladeprognose · Ladestatus unbestätigt"}
+              </p>
+              <Show when={estimate().provisional}>
+                <p class="text-xs text-muted-foreground">Vorläufig</p>
+              </Show>
+              <Show
+                when={estimate().fullAt}
+                fallback={
+                  <p class="text-muted-foreground">
+                    {m.device_etaCalculating()}
+                  </p>
+                }
+              >
+                {(fullAt) => (
+                  <>
+                    <p class="text-muted-foreground">
+                      {m.device_etaRemaining({
+                        duration: duration(remainingMinutes(fullAt())),
+                      })}
+                    </p>
+                    <p class="text-muted-foreground">
+                      {m.device_etaAt({ time: timeAtFull(fullAt()) })}
+                    </p>
+                  </>
+                )}
+              </Show>
+            </section>
+          )}
+        </Show>
+      }
+    >
+      <section
+        class="rounded-2xl border bg-card px-4 py-3 text-sm"
+        role="status"
+        aria-live="polite"
+      >
+        <p class="font-medium">Voll (99%)</p>
+      </section>
     </Show>
   );
 };

@@ -1,4 +1,3 @@
-import { createSessionExtension } from "./sessionExtension";
 import { createEffect, createSignal, onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { AnalysisResult } from "../shared/analysis";
@@ -15,11 +14,13 @@ import {
   StatusRegister2Bit,
   withBit,
 } from "./protocol";
+import { createSessionExtension } from "./sessionExtension";
 
 // Sliders and +/- buttons fire many changes; only the last one is written.
 // Values held by the writer are not overwritten by incoming updates.
 const WRITE_DEBOUNCE_MS = 300;
 const IGNORE_UPDATES_AFTER_WRITE_MS = 1000;
+let batteryReadingSequence = 0;
 
 type DebouncedField =
   | "targetTemp"
@@ -29,6 +30,8 @@ type DebouncedField =
 
 export interface CraftyState extends CraftyValues {
   loaded: boolean;
+  batteryReadingAt: number | undefined;
+  batteryReadingId: number;
 }
 
 /**
@@ -42,6 +45,8 @@ export const createCraftyStore = (
 ) => {
   const [state, setState] = createStore<CraftyState>({
     loaded: false,
+    batteryReadingAt: undefined,
+    batteryReadingId: 0,
     targetTemp: 0,
     currentTemp: 0,
     boostTemp: 0,
@@ -69,7 +74,15 @@ export const createCraftyStore = (
     for (const field of Object.keys(next) as (keyof CraftyUpdate)[]) {
       if (writer.isHeld(field as DebouncedField)) delete next[field];
     }
-    setState(next);
+    setState({
+      ...next,
+      ...(next.batteryLevel === undefined
+        ? {}
+        : {
+            batteryReadingAt: Date.now(),
+            batteryReadingId: ++batteryReadingSequence,
+          }),
+    });
   };
 
   // Subscribe before starting so the initial reads arrive
