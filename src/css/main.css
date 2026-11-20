@@ -287,44 +287,162 @@
   --popover: #29203e;
   --popover-foreground: #f6eafa;
 }
+:root[data-custom-base="true"] {
+  --background: var(--custom-base);
+  --foreground: var(--custom-base-foreground);
+  --card: color-mix(
+    in srgb,
+    var(--custom-base) 92%,
+    var(--custom-surface-tint)
+  );
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --secondary: color-mix(
+    in srgb,
+    var(--custom-base) 84%,
+    var(--custom-surface-tint)
+  );
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(
+    in srgb,
+    var(--custom-base) 80%,
+    var(--custom-surface-tint)
+  );
+  --muted-foreground: color-mix(
+    in srgb,
+    var(--foreground) 72%,
+    var(--background)
+  );
+  --accent: color-mix(
+    in srgb,
+    var(--custom-base) 84%,
+    var(--custom-surface-tint)
+  );
+  --accent-foreground: var(--foreground);
+  --border: color-mix(
+    in srgb,
+    var(--custom-base) 65%,
+    var(--custom-surface-tint)
+  );
+  --input: color-mix(
+    in srgb,
+    var(--custom-base) 55%,
+    var(--custom-surface-tint)
+  );
+  --track: color-mix(
+    in srgb,
+    var(--custom-base) 78%,
+    var(--custom-surface-tint)
+  );
+  --nav: var(--background);
+}
+:root.dark[data-custom-base="true"] {
+  --background: color-mix(in srgb, var(--custom-base) 35%, #000000);
+  --foreground: #f8fafc;
+  --card: color-mix(in srgb, var(--background) 90%, #ffffff);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --secondary: color-mix(in srgb, var(--background) 82%, #ffffff);
+  --secondary-foreground: var(--foreground);
+  --muted: color-mix(in srgb, var(--background) 80%, #ffffff);
+  --muted-foreground: #cbd5e1;
+  --accent: color-mix(in srgb, var(--background) 82%, #ffffff);
+  --accent-foreground: var(--foreground);
+  --border: color-mix(in srgb, var(--background) 68%, #ffffff);
+  --input: color-mix(in srgb, var(--background) 55%, #ffffff);
+  --track: color-mix(in srgb, var(--background) 78%, #ffffff);
+  --nav: var(--background);
+}
 .color-palette {
   max-width: 512px;
   margin: auto;
   padding: 16px 20px 0;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
-  font-size: 10px;
-  letter-spacing: 0.1em;
+  font-size: 12px;
   color: var(--muted-foreground);
 }
-.color-palette label {
-  font-weight: 700;
-}
-.color-palette select {
-  min-width: 0;
-  flex: 1;
-  background: var(--card);
-  color: var(--foreground);
-  border: 1px solid var(--border);
-  padding: 10px 8px;
-  border-radius: 7px;
-  font: 600 12px inherit;
-  letter-spacing: 0;
-}
-.color-palette input[type="color"] {
-  width: 42px;
+.palette-trigger {
+  display: inline-flex;
+  width: 40px;
   height: 40px;
-  flex: 0 0 42px;
+  align-items: center;
+  justify-content: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--foreground);
+}
+.palette-popover {
+  z-index: 50;
+  width: min(22rem, calc(100vw - 2rem));
+  max-height: min(80dvh, 32rem);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--popover);
+  padding: 16px;
+  color: var(--popover-foreground);
+  box-shadow: 0 16px 36px rgb(0 0 0 / 0.22);
+}
+.palette-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 12px;
+}
+.palette-heading strong {
+  color: var(--foreground);
+  font-size: 14px;
+}
+.palette-heading span {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.palette-field {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--foreground);
+  font-size: 13px;
+}
+.palette-field select {
+  min-width: 0;
+  max-width: 60%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  padding: 8px;
+  color: var(--foreground);
+}
+.palette-field input[type="color"] {
+  width: 48px;
+  height: 38px;
+  flex: 0 0 48px;
   padding: 3px;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--card);
   cursor: pointer;
 }
+.palette-reset {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--secondary);
+  color: var(--foreground);
+  font-size: 12px;
+}
 .color-palette a {
   white-space: nowrap;
-  letter-spacing: 0;
 }
 .connection-beacon {
   display: none;
@@ -341,10 +459,6 @@
 }
 @media (max-width: 360px) {
   .color-palette {
-    gap: 6px;
     padding-inline: 15px;
-  }
-  .color-palette label {
-    font-size: 8px;
   }
 }

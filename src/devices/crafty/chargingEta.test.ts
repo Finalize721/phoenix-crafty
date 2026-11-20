@@ -25,16 +25,19 @@ describe("Crafty charging ETA", () => {
     ).toBeUndefined();
   });
 
-  it("uses the median of recent measured rates for a full-charge estimate", () => {
+  it("uses the measured live slope when no completed curve exists", () => {
     const samples: BatterySample[] = [
       { level: 20, time: 0, sessionId: "session" },
       { level: 30, time: 10 * 60_000, sessionId: "session" },
-      { level: 40, time: 30 * 60_000, sessionId: "session" },
+      { level: 40, time: 20 * 60_000, sessionId: "session" },
     ];
 
-    expect(estimateChargingEta(samples, 40, "session", 30 * 60_000)).toEqual({
-      expiresAt: 60 * 60_000,
-      remainingMinutes: 80,
+    expect(
+      estimateChargingEta(samples, 40, "session", 20 * 60_000)
+    ).toMatchObject({
+      expiresAt: 50 * 60_000,
+      remainingMinutes: 60,
+      source: "live",
     });
   });
 
@@ -46,9 +49,10 @@ describe("Crafty charging ETA", () => {
     }));
     const now = 20 * 30_000;
 
-    expect(estimateChargingEta(samples, 20, "session", now)).toEqual({
+    expect(estimateChargingEta(samples, 20, "session", now)).toMatchObject({
       expiresAt: now + 30 * 60_000,
       remainingMinutes: 40,
+      source: "live",
     });
   });
 
@@ -58,17 +62,30 @@ describe("Crafty charging ETA", () => {
       { level: 60, time: 10 * 60_000, sessionId: "session" },
       { level: 70, time: 20 * 60_000, sessionId: "session" },
       { level: 90, time: 40 * 60_000, sessionId: "session" },
-      { level: 95, time: 55 * 60_000, sessionId: "session" },
-      { level: 96, time: 58 * 60_000, sessionId: "session" },
+      {
+        level: 95,
+        time: 55 * 60_000,
+        sessionId: "session",
+        continuousSincePrevious: true,
+      },
+      {
+        level: 96,
+        time: 58 * 60_000,
+        sessionId: "session",
+        continuousSincePrevious: true,
+      },
     ];
 
-    expect(estimateChargingEta(samples, 96, "session", 58 * 60_000)).toEqual({
+    expect(
+      estimateChargingEta(samples, 96, "session", 58 * 60_000)
+    ).toMatchObject({
       expiresAt: 88 * 60_000,
       remainingMinutes: 12,
+      source: "live",
     });
   });
 
-  it("uses saved charge rates after a live rise in a new session", () => {
+  it("does not mistake an incomplete historical session for a full curve", () => {
     const storage = new Map<string, string>();
     vi.stubGlobal("localStorage", {
       getItem: (key: string) => storage.get(key) ?? null,
@@ -87,11 +104,32 @@ describe("Crafty charging ETA", () => {
       expect(samples).toHaveLength(5);
       expect(estimateChargingEta(samples, 81, "new", 65 * 60_000)).toEqual({
         expiresAt: 95 * 60_000,
-        remainingMinutes: 55,
       });
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("uses a completed locally saved curve after a current-session rise", () => {
+    const samples: BatterySample[] = [
+      { level: 50, time: 0, sessionId: "old" },
+      { level: 60, time: 10 * 60_000, sessionId: "old" },
+      { level: 70, time: 20 * 60_000, sessionId: "old" },
+      { level: 80, time: 30 * 60_000, sessionId: "old" },
+      { level: 90, time: 40 * 60_000, sessionId: "old" },
+      { level: 95, time: 50 * 60_000, sessionId: "old" },
+      { level: 100, time: 60 * 60_000, sessionId: "old" },
+      { level: 80, time: 2 * 60 * 60_000, sessionId: "new" },
+      { level: 85, time: 2 * 60 * 60_000 + 5 * 60_000, sessionId: "new" },
+      { level: 90, time: 2 * 60 * 60_000 + 10 * 60_000, sessionId: "new" },
+    ];
+
+    expect(
+      estimateChargingEta(samples, 90, "new", 2 * 60 * 60_000 + 10 * 60_000)
+    ).toMatchObject({
+      remainingMinutes: 20,
+      source: "history",
+    });
   });
 
   it("uses the configured retention period for saved battery readings", () => {

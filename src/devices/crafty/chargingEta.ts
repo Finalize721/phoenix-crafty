@@ -1,34 +1,24 @@
 import { isWithinHistoryRetention } from "../../utils/historyRetention";
+import { predictChargingCurve } from "./chargingCurveModel";
 
 export interface BatterySample {
   level: number;
   time: number;
   sessionId: string;
+  breakBefore?: boolean;
+  continuousSincePrevious?: boolean;
 }
 
 export interface ChargingEta {
   expiresAt: number;
   remainingMinutes?: number;
+  source?: "history" | "live";
 }
 
 const STORAGE_KEY = "craftyChargingHistory";
-const MAX_SAMPLES = 120;
+const MAX_SAMPLES = 2500;
 const CHARGING_WINDOW_MS = 30 * 60 * 1000;
 const MAX_RATE_INTERVAL_MS = 60 * 60 * 1000;
-const MIN_RATE_INTERVAL_MS = 60 * 1000;
-const RATE_SAMPLE_COUNT = 8;
-
-type RateSample = { level: number; percentPerHour: number };
-
-const median = (values: number[]) => {
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2
-    ? sorted[middle]
-    : (sorted[middle - 1] + sorted[middle]) / 2;
-};
-
-const rateBand = (level: number) => (level >= 90 ? 2 : level >= 80 ? 1 : 0);
 
 const storageKey = (deviceId: string) =>
   `${STORAGE_KEY}:${encodeURIComponent(deviceId)}`;
@@ -61,7 +51,11 @@ export const readChargingHistory = (
         sample.level <= 100 &&
         isWithinHistoryRetention(sample.time, now) &&
         typeof sample.sessionId === "string" &&
-        Number.isFinite(sample.time)
+        Number.isFinite(sample.time) &&
+        (sample.breakBefore === undefined ||
+          typeof sample.breakBefore === "boolean") &&
+        (sample.continuousSincePrevious === undefined ||
+          typeof sample.continuousSincePrevious === "boolean")
     );
     if (retained.length !== stored.length) storeHistory(deviceId, retained);
     return retained;
@@ -75,11 +69,15 @@ const appendSample = (
   deviceId: string,
   level: number,
   time: number,
-  sessionId: string
+  sessionId: string,
+  continuity: Pick<
+    BatterySample,
+    "breakBefore" | "continuousSincePrevious"
+  > = {}
 ) => {
   const next = [
     ...history.filter((sample) => isWithinHistoryRetention(sample.time, time)),
-    { level, time, sessionId },
+    { level, time, sessionId, ...continuity },
   ].slice(-MAX_SAMPLES);
   storeHistory(deviceId, next);
   return next;
@@ -91,7 +89,11 @@ export const recordBatterySample = (
   level: number,
   time = Date.now(),
   sessionId: string,
-  history = readChargingHistory(deviceId, time)
+  history = readChargingHistory(deviceId, time),
+  continuity: Pick<
+    BatterySample,
+    "breakBefore" | "continuousSincePrevious"
+  > = {}
 ) => {
   if (!Number.isFinite(level) || level < 0 || level > 100) return [];
   const retained = history.filter((sample) =>
@@ -102,7 +104,7 @@ export const recordBatterySample = (
   if (latest?.level === level && latest.sessionId === sessionId)
     return retained;
   if (latest && time <= latest.time) return retained;
-  return appendSample(retained, deviceId, level, time, sessionId);
+  return appendSample(retained, deviceId, level, time, sessionId, continuity);
 };
 
 /** Crafty has no charging flag, so a recent same-session rise establishes it. */
@@ -127,59 +129,12 @@ export const estimateChargingEta = (
     return;
   }
 
-  const rates: RateSample[] = [];
-  for (let index = 1; index < samples.length; index++) {
-    const after = samples[index];
-    let beforeIndex = index - 1;
-    while (
-      beforeIndex >= 0 &&
-      samples[beforeIndex].sessionId === after.sessionId &&
-      after.time - samples[beforeIndex].time < MIN_RATE_INTERVAL_MS
-    ) {
-      beforeIndex--;
-    }
-    if (beforeIndex < 0 || samples[beforeIndex].sessionId !== after.sessionId) {
-      continue;
-    }
-    const before = samples[beforeIndex];
-    const elapsed = after.time - before.time;
-    const increase = after.level - before.level;
-    if (
-      increase > 0 &&
-      elapsed >= MIN_RATE_INTERVAL_MS &&
-      elapsed <= MAX_RATE_INTERVAL_MS
-    ) {
-      rates.push({
-        level: after.level,
-        percentPerHour: (increase * 60 * 60 * 1000) / elapsed,
-      });
-    }
-  }
-
-  const recentRates = rates
-    .slice(-RATE_SAMPLE_COUNT)
-    .map((sample) => sample.percentPerHour);
   const expiresAt = latest.time + CHARGING_WINDOW_MS;
-  if (recentRates.length < 2) return { expiresAt };
-
-  const overallRate = median(recentRates);
-  const ratesByBand: number[][] = [[], [], []];
-  for (const sample of rates) {
-    ratesByBand[rateBand(sample.level)].push(sample.percentPerHour);
-  }
-  const bandRates = ratesByBand.map((bandRates) =>
-    bandRates.length > 0
-      ? median(bandRates.slice(-RATE_SAMPLE_COUNT))
-      : overallRate
-  );
-  let remainingMinutes = 0;
-  for (let percent = Math.floor(level); percent < 100; percent++) {
-    const fraction = Math.min(1, percent + 1 - level);
-    const rate = bandRates[rateBand(percent)];
-    remainingMinutes += (fraction * 60) / rate;
-  }
+  const prediction = predictChargingCurve(samples, level, sessionId, now);
+  if (!prediction) return { expiresAt };
   return {
     expiresAt,
-    remainingMinutes: Math.ceil(remainingMinutes),
+    remainingMinutes: prediction.remainingMinutes,
+    source: prediction.source,
   };
 };

@@ -152,24 +152,75 @@ const CraftyBattery = () => {
 
 const CraftyChargingEta = () => {
   const { state, isCraftyPlus } = useCrafty();
-  const { deviceInfo, knownDevice } = useBluetooth();
+  const { connectionState, deviceInfo, knownDevice } = useBluetooth();
   const [eta, setEta] = createSignal<
     (ReturnType<typeof estimateChargingEta> & { fullAt?: number }) | undefined
   >();
   const [now, setNow] = createSignal(Date.now());
   const updateClock = () => setNow(Date.now());
   const clockTimer = setInterval(updateClock, 60_000);
-  document.addEventListener("visibilitychange", updateClock);
-  onCleanup(() => {
-    clearInterval(clockTimer);
-    document.removeEventListener("visibilitychange", updateClock);
-  });
   let historyId: string | undefined;
   let sessionId: string | undefined;
   let samples: BatterySample[] = [];
+  let breakBeforeNextSample = false;
+  let continuityValid = false;
+  let wasConnected = connectionState() === ConnectionState.CONNECTED;
+
+  const markDiscontinuity = () => {
+    breakBeforeNextSample = true;
+    continuityValid = false;
+  };
+  const calculateEta = (
+    history: BatterySample[],
+    level: number,
+    activeSessionId: string,
+    time: number
+  ) => {
+    const estimate = estimateChargingEta(history, level, activeSessionId, time);
+    const latest = history[history.length - 1];
+    const fullAt =
+      estimate?.remainingMinutes === undefined || !latest
+        ? undefined
+        : latest.time + estimate.remainingMinutes * 60_000;
+    setEta(estimate ? { ...estimate, fullAt } : undefined);
+    return estimate;
+  };
+  const handleVisibilityChange = () => {
+    updateClock();
+    if (document.visibilityState !== "visible") return;
+    const id = deviceInfo().serialNumber || knownDevice()?.id;
+    const activeSessionId = sessionId;
+    if (
+      !state.loaded ||
+      !isCraftyPlus ||
+      !id ||
+      id !== historyId ||
+      !activeSessionId ||
+      connectionState() !== ConnectionState.CONNECTED
+    ) {
+      return;
+    }
+    calculateEta(samples, state.batteryLevel, activeSessionId, Date.now());
+  };
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  onCleanup(() => {
+    clearInterval(clockTimer);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+  });
+  document.addEventListener("visibilitychange", markDiscontinuity);
+  onCleanup(() =>
+    document.removeEventListener("visibilitychange", markDiscontinuity)
+  );
+
+  createEffect(() => {
+    const connected = connectionState() === ConnectionState.CONNECTED;
+    if (!connected || !wasConnected) markDiscontinuity();
+    wasConnected = connected;
+  });
 
   createEffect(() => {
     const level = state.batteryLevel;
+    const connected = connectionState() === ConnectionState.CONNECTED;
     const id = deviceInfo().serialNumber || knownDevice()?.id;
     if (!state.loaded || !isCraftyPlus || !id) {
       setEta(undefined);
@@ -180,25 +231,46 @@ const CraftyChargingEta = () => {
       historyId = id;
       sessionId = crypto.randomUUID();
       samples = readChargingHistory(id);
+      breakBeforeNextSample = false;
+      continuityValid = false;
     }
     const activeSessionId = sessionId ?? crypto.randomUUID();
     sessionId = activeSessionId;
     const now = Date.now();
-    samples = recordBatterySample(id, level, now, activeSessionId, samples);
+    const visible = document.visibilityState === "visible";
+    const previousSample = samples[samples.length - 1];
+    const nextSamples = recordBatterySample(
+      id,
+      level,
+      now,
+      activeSessionId,
+      samples,
+      {
+        ...(breakBeforeNextSample ? { breakBefore: true } : {}),
+        ...(continuityValid && connected && visible
+          ? { continuousSincePrevious: true }
+          : {}),
+      }
+    );
+    const latestSample = nextSamples[nextSamples.length - 1];
+    const recorded =
+      latestSample !== previousSample &&
+      latestSample?.time === now &&
+      latestSample.level === level &&
+      latestSample.sessionId === activeSessionId;
+    samples = nextSamples;
+    if (recorded) {
+      breakBeforeNextSample = !connected || !visible;
+      continuityValid = connected && visible;
+    } else if (!connected || !visible) {
+      continuityValid = false;
+    }
 
-    const estimate = estimateChargingEta(samples, level, activeSessionId, now);
-    const fullAt =
-      estimate?.remainingMinutes === undefined
-        ? undefined
-        : now + estimate.remainingMinutes * 60_000;
-    setEta(estimate ? { ...estimate, fullAt } : undefined);
+    const estimate = calculateEta(samples, level, activeSessionId, now);
     if (estimate) {
       const history = samples;
       const expiryTimer = setTimeout(
-        () =>
-          setEta(
-            estimateChargingEta(history, level, activeSessionId, Date.now())
-          ),
+        () => calculateEta(history, level, activeSessionId, Date.now()),
         Math.max(0, estimate.expiresAt - now + 1)
       );
       onCleanup(() => {
@@ -231,6 +303,11 @@ const CraftyChargingEta = () => {
           aria-live="polite"
         >
           <p class="font-medium">{m.device_isCharging()}</p>
+          <Show when={estimate().source === "live"}>
+            <p class="text-xs text-muted-foreground">
+              Live-Schätzung · vorläufig
+            </p>
+          </Show>
           <Show
             when={estimate().fullAt}
             fallback={
