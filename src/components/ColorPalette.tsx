@@ -47,14 +47,6 @@ const readColor = (key: string) => {
   }
 };
 
-const readCosmicBackground = () => {
-  try {
-    return localStorage.getItem("crafty-cosmic-background") === "true";
-  } catch {
-    return false;
-  }
-};
-
 const defaultAccent = (id: PaletteId) =>
   palettes.find((palette) => palette.id === id)?.accent ?? palettes[0].accent;
 
@@ -68,10 +60,6 @@ const [customAccent, setCustomAccent] = createSignal(
 const [customBase, setCustomBase] = createSignal(
   readColor("crafty-base-color")
 );
-const [cosmicBackground, setCosmicBackground] = createSignal(
-  readCosmicBackground()
-);
-
 const accent = () => customAccent() ?? defaultAccent(palette());
 
 const applyAccent = (color: string) => {
@@ -192,34 +180,8 @@ export const ColorPalette = () => {
     }
   };
 
-  const toggleCosmicBackground = (enabled: boolean) => {
-    setCosmicBackground(enabled);
-    if (enabled) {
-      document.documentElement.dataset.cosmicBackground = "true";
-    } else {
-      delete document.documentElement.dataset.cosmicBackground;
-    }
-    try {
-      if (enabled) {
-        localStorage.setItem("crafty-cosmic-background", "true");
-      } else {
-        localStorage.removeItem("crafty-cosmic-background");
-      }
-    } catch {
-      // The selected background still applies for this session.
-    }
-  };
-
   return (
     <div class="color-palette">
-      <div class="palette-brand">
-        <img
-          src={`${import.meta.env.BASE_URL}pwa-192x192.png`}
-          alt=""
-          aria-hidden="true"
-        />
-        <span>Crafty Atelier</span>
-      </div>
       <Popover.Root placement="bottom-start" gutter={8}>
         <Popover.Trigger
           class="palette-trigger"
@@ -267,17 +229,6 @@ export const ColorPalette = () => {
               />
             </label>
             <label class="palette-field">
-              <span>Galaxie-Hintergrund</span>
-              <input
-                type="checkbox"
-                aria-label="Galaxie-Hintergrund"
-                checked={cosmicBackground()}
-                onChange={(event) =>
-                  toggleCosmicBackground(event.currentTarget.checked)
-                }
-              />
-            </label>
-            <label class="palette-field">
               <span>{m.settings_accentColor()}</span>
               <input
                 type="color"
@@ -305,13 +256,6 @@ export const ColorPalette = () => {
 
 if (typeof document !== "undefined") {
   document.documentElement.dataset.skin = palette();
-  document.documentElement.style.setProperty(
-    "--cosmic-background-image",
-    `url("${import.meta.env.BASE_URL}galaxy-background.jpg")`
-  );
-  if (cosmicBackground()) {
-    document.documentElement.dataset.cosmicBackground = "true";
-  }
   const savedBase = customBase();
   const savedAccent = customAccent();
   if (savedBase) applyBaseColor(savedBase);
