@@ -125,7 +125,7 @@ const showNotification = async (
 ) => {
   const options: NotificationOptions = {
     body,
-    icon: `${import.meta.env.BASE_URL}pwa-192x192.png`,
+    icon: `${import.meta.env.BASE_URL}pwa-192x192.png?v=2`,
     tag,
   };
   // Mobile Chrome only allows notifications through the service worker

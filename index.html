@@ -2,8 +2,8 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.ico" sizes="48x48" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" href="/favicon.ico?v=2" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
     <meta name="theme-color" content="#0b1426" />
     <meta
       name="description"
@@ -32,18 +32,6 @@
         letter-spacing: 0.04em;
       }
 
-      #loading-screen::after {
-        position: absolute;
-        z-index: 0;
-        inset: 0;
-        background: linear-gradient(
-          180deg,
-          rgb(5 4 20 / 0.3),
-          rgb(5 4 20 / 0.65)
-        );
-        content: "";
-      }
-
       #loading-screen .loading-background {
         position: absolute;
         z-index: 0;
@@ -58,8 +46,9 @@
         z-index: 1;
         width: min(42vw, 192px);
         height: auto;
-        border-radius: 24px;
         box-shadow: 0 12px 48px rgb(0 0 0 / 0.35);
+        border-radius: 50%;
+        mix-blend-mode: screen;
       }
 
       #loading-screen span {
@@ -92,10 +81,10 @@
     <div id="loading-screen" role="status" aria-label="Crafty Atelier loading">
       <img
         class="loading-background"
-        src="%BASE_URL%loading-background.jpg"
+        src="%BASE_URL%loading-background.jpg?v=2"
         alt=""
       />
-      <img class="loading-logo" src="%BASE_URL%loading-logo.png" alt="" />
+      <img class="loading-logo" src="%BASE_URL%loading-logo.png?v=2" alt="" />
       <span>Crafty Atelier</span>
     </div>
     <div id="root"></div>

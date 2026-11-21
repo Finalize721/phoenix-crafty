@@ -1,5 +1,5 @@
 /**
- * Renders the app icons in public/ from scripts/icons/logo.png.
+ * Renders the app icons and startup logo in public/ from scripts/icons/logo.png.
  *
  *   bun run icons
  *
@@ -22,23 +22,25 @@ const browser = await chromium.launch({
 });
 const page = await browser.newPage();
 
-const render = async (size) => {
+const render = async (size, scale = 1) => {
+  const imageSize = Math.round(size * scale);
   await page.setViewportSize({ width: size, height: size });
   await page.setContent(
-    `<style>html,body{margin:0;width:${size}px;height:${size}px}img{display:block;width:${size}px;height:${size}px}</style><img src="${logoDataUrl}" alt="">`
+    `<style>html,body{margin:0;width:${size}px;height:${size}px;background:#050414}body{display:grid;place-items:center}img{display:block;width:${imageSize}px;height:${imageSize}px;object-fit:contain}</style><img src="${logoDataUrl}" alt="">`
   );
   await page.locator("img").evaluate((image) => image.decode());
   return page.screenshot();
 };
 
 const outputs = [
-  ["pwa-192x192.png", 192],
-  ["pwa-512x512.png", 512],
-  ["maskable-512x512.png", 512],
-  ["apple-touch-icon.png", 180],
+  ["pwa-192x192.png", 192, 1],
+  ["pwa-512x512.png", 512, 1],
+  ["loading-logo.png", 512, 1],
+  ["maskable-512x512.png", 512, 0.8],
+  ["apple-touch-icon.png", 180, 1],
 ];
-for (const [file, size] of outputs) {
-  writeFileSync(join(publicDir, file), await render(size));
+for (const [file, size, scale] of outputs) {
+  writeFileSync(join(publicDir, file), await render(size, scale));
   console.log(`public/${file}`);
 }
 
