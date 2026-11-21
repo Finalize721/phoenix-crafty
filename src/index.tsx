@@ -35,6 +35,7 @@ const dispose = render(
   ),
   root
 );
+document.getElementById("loading-screen")?.remove();
 /** Hot Module Replacement */
 if (import.meta.hot) {
   import.meta.hot.accept();

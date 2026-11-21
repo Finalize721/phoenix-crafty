@@ -1,5 +1,5 @@
 /**
- * Renders the app icons in public/ from scripts/icons/icon.svg.
+ * Renders the app icons in public/ from scripts/icons/logo.png.
  *
  *   bun run icons
  *
@@ -12,40 +12,40 @@ import { chromium } from "@playwright/test";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const publicDir = join(root, "public");
-const svg = readFileSync(join(root, "scripts/icons/icon.svg"), "utf8");
-
-// Maskable and Apple icons are cropped by the platform: no rounded corners,
-// the background has to fill the whole square
-const fullBleed = svg.replace('rx="112"', 'rx="0"');
+const logo = readFileSync(join(root, "scripts/icons/logo.png")).toString(
+  "base64"
+);
+const logoDataUrl = `data:image/png;base64,${logo}`;
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM_PATH || undefined,
 });
 const page = await browser.newPage();
 
-const render = async (source, size) => {
+const render = async (size) => {
   await page.setViewportSize({ width: size, height: size });
   await page.setContent(
-    `<style>html,body{margin:0;background:transparent}svg{display:block;width:${size}px;height:${size}px}</style>${source}`
+    `<style>html,body{margin:0;width:${size}px;height:${size}px}img{display:block;width:${size}px;height:${size}px}</style><img src="${logoDataUrl}" alt="">`
   );
-  return page.screenshot({ omitBackground: true });
+  await page.locator("img").evaluate((image) => image.decode());
+  return page.screenshot();
 };
 
 const outputs = [
-  ["pwa-192x192.png", svg, 192],
-  ["pwa-512x512.png", svg, 512],
-  ["maskable-512x512.png", fullBleed, 512],
-  ["apple-touch-icon.png", fullBleed, 180],
+  ["pwa-192x192.png", 192],
+  ["pwa-512x512.png", 512],
+  ["maskable-512x512.png", 512],
+  ["apple-touch-icon.png", 180],
 ];
-for (const [file, source, size] of outputs) {
-  writeFileSync(join(publicDir, file), await render(source, size));
+for (const [file, size] of outputs) {
+  writeFileSync(join(publicDir, file), await render(size));
   console.log(`public/${file}`);
 }
 
 // favicon.ico with embedded PNGs (supported by every current browser)
 const sizes = [16, 32, 48];
 const images = [];
-for (const size of sizes) images.push(await render(svg, size));
+for (const size of sizes) images.push(await render(size));
 const header = Buffer.alloc(6 + 16 * sizes.length);
 header.writeUInt16LE(0, 0);
 header.writeUInt16LE(1, 2);
@@ -66,8 +66,5 @@ writeFileSync(
   Buffer.concat([header, ...images])
 );
 console.log("public/favicon.ico");
-
-writeFileSync(join(publicDir, "favicon.svg"), svg);
-console.log("public/favicon.svg");
 
 await browser.close();

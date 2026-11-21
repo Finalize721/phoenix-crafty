@@ -31,7 +31,7 @@ export default defineConfig({
       registerType: "prompt",
       // The globPatterns below already cover the icons
       includeManifestIcons: false,
-      // Icons are rendered from scripts/icons/icon.svg: bun run icons
+      // Icons are rendered from scripts/icons/logo.png: bun run icons
       manifest: {
         name: "Crafty Atelier",
         short_name: "Crafty Atelier",
@@ -69,7 +69,10 @@ export default defineConfig({
         // browsers without service workers. Screenshots, the 512 px icons and
         // the Apple touch icon are only read when installing, which needs a
         // connection anyway (pwa-192x192.png stays: notifications use it)
-        globPatterns: ["**/*.{js,css,html,svg,png,ico}", "**/*latin*.woff2"],
+        globPatterns: [
+          "**/*.{js,css,html,svg,png,ico,jpg}",
+          "**/*latin*.woff2",
+        ],
         // The documentation website is published next to the app under /docs/
         // (build.yml); it is not an app route, so the service worker must not
         // answer it with the app's index.html

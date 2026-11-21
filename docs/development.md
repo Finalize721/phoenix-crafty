@@ -57,7 +57,7 @@ secure context, so Web Bluetooth works there. For another device on your network
 | `bun run test:e2e` | end-to-end tests (Playwright, starts the dev server) |
 | `bun run test:e2e:ui` / `test:e2e:debug` / `test:e2e:report` | Playwright UI mode, debugger, last report |
 | `bun run screenshots` | renders the images in `docs/` ([below](#updating-screenshots)) |
-| `bun run icons` | renders the app icons in `public/` from `scripts/icons/icon.svg` ([below](#app-icons)) |
+| `bun run icons` | renders the app icons in `public/` from `scripts/icons/logo.png` ([below](#app-icons)) |
 | `bun run social-preview` | renders `docs/social-preview.png` ([below](#social-preview)) |
 | `bun run i18n` | compiles `messages/*.json` into `src/paraglide` |
 | `bun run release:patch` / `minor` / `major` | bumps the version, tags and pushes ([Releases](releases.md)) |
@@ -237,18 +237,18 @@ the official Playwright image and commits the ones that changed.
 
 ## App icons
 
-Every icon (favicon, PWA icons, maskable icon, Apple touch icon) is rendered from one source,
-`scripts/icons/icon.svg`:
+Every app icon (favicon, PWA icons, maskable icon, Apple touch icon) is rendered from one source,
+`scripts/icons/logo.png`:
 
 ```bash
 bun run icons
 ```
 
-`scripts/icons/generate.mjs` writes `public/pwa-192x192.png`, `pwa-512x512.png`, the full-bleed
-`maskable-512x512.png` and `apple-touch-icon.png`, `favicon.ico` (16, 32 and 48 px) and `favicon.svg`.
-Keep the artwork inside the central circle (80 % of the width): Android crops maskable icons to a
-circle or squircle. `bun run screenshots` also refreshes `public/screenshots/`, which Android shows in
-the install dialog. Use `CHROMIUM_PATH` here as well if the bundled browser is missing.
+`scripts/icons/generate.mjs` writes `public/pwa-192x192.png`, `pwa-512x512.png`,
+`maskable-512x512.png`, `apple-touch-icon.png` and `favicon.ico` (16, 32 and 48 px).
+Keep the logo inside the central safe area because Android crops maskable icons to a circle or
+squircle. `bun run screenshots` also refreshes `public/screenshots/`, which Android shows in the
+install dialog. Use `CHROMIUM_PATH` here as well if the bundled browser is missing.
 
 ## Social preview
 
