@@ -147,6 +147,21 @@ describe("Crafty driver", () => {
     });
   });
 
+  it("distinguishes initial battery reads from BLE change notifications", async () => {
+    const device = createServer();
+    const driver = await connectCrafty(device.server, queue);
+    const origins: string[] = [];
+    driver.subscribe((update, origin) => {
+      if (update.batteryLevel !== undefined) origins.push(origin ?? "missing");
+    });
+
+    await driver.start();
+    expect(origins).toEqual(["snapshot"]);
+    characteristicOf(device.characteristics, UUID.powerChanged).notify([81, 0]);
+    expect(origins).toEqual(["snapshot", "notification"]);
+    await driver.dispose();
+  });
+
   it("reads the serial number and detects a Crafty+", async () => {
     const { driver } = await collect();
     expect(driver.serialNumber).toBe("CY123456");

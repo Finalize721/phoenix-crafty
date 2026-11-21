@@ -10,6 +10,7 @@ import {
   getService,
   type Reader,
   type UpdateListener,
+  type UpdateOrigin,
 } from "../shared/characteristicDevice";
 import {
   encodeBoostTemperature,
@@ -49,6 +50,7 @@ export interface CraftyValues {
 
 export type CraftyUpdate = Partial<CraftyValues>;
 export type CraftyUpdateListener = UpdateListener<CraftyValues>;
+export type { UpdateOrigin as CraftyUpdateOrigin };
 
 type Characteristic = BluetoothRemoteGATTCharacteristic;
 

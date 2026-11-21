@@ -260,6 +260,7 @@ const CraftyChargingEta = () => {
       activeSessionId,
       samples,
       {
+        origin: state.batteryReadingOrigin ?? "snapshot",
         ...(breakBeforeNextSample ? { breakBefore: true } : {}),
         ...(continuityValid && connected && visible
           ? { continuousSincePrevious: true }

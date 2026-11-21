@@ -1,7 +1,15 @@
+import {
+  type BatteryObservationOrigin,
+  boundPercentArrival,
+  extractObservationEvidence,
+  isArrivalConsistentWithBounds,
+} from "./observationQuality";
+
 export interface BatteryCurveSample {
   level: number;
   time: number;
   sessionId: string;
+  origin?: BatteryObservationOrigin;
   breakBefore?: boolean;
   continuousSincePrevious?: boolean;
 }
@@ -20,6 +28,7 @@ type Run = { sessionId: string; points: BatteryCurveSample[] };
 type Segment = {
   from: number;
   to: number;
+  elapsedMinutes: number;
   minutesPerPercent: number;
   sessionId: string;
 };
@@ -76,53 +85,75 @@ export const splitChargingRuns = (samples: BatteryCurveSample[]): Run[] => {
 };
 
 const atLevel = (run: Run, level: number): number | undefined => {
-  const points = run.points;
-  const last = points[points.length - 1];
-  if (points.length < 2 || level < points[0].level || level > last.level) {
-    return undefined;
+  const evidence = extractObservationEvidence(run.points);
+  const bounds = boundPercentArrival(run.points, level, run.sessionId);
+  const observed = evidence.transitions.find(
+    (arrival) => arrival.level === level
+  );
+  if (observed && isArrivalConsistentWithBounds(observed.at, bounds)) {
+    return observed.at;
   }
-  if (level === points[0].level) return points[0].time;
-  for (let index = 1; index < points.length; index++) {
-    const before = points[index - 1];
-    const after = points[index];
-    if (
-      before.level < level &&
-      level <= after.level &&
-      after.level > before.level
-    ) {
-      return (
-        before.time +
-        ((level - before.level) / (after.level - before.level)) *
-          (after.time - before.time)
-      );
+  for (const segment of evidence.measuredSegments) {
+    const arrival = segment.arrivals.find((item) => item.level === level);
+    if (arrival && isArrivalConsistentWithBounds(arrival.at, bounds)) {
+      return arrival.at;
     }
   }
   return undefined;
 };
 
 const observedTarget = (run: Run): boolean => {
-  const index = run.points.findIndex((point) => point.level >= 99);
   return (
-    index > 0 &&
-    run.points[index - 1].level < 99 &&
-    run.points[index].time - run.points[index - 1].time >= 0
+    extractObservationEvidence(run.points).observed99ArrivalAt !== undefined
   );
 };
 
 const toSegments = (runs: Run[]): Segment[] => {
   const segments: Segment[] = [];
   for (const run of runs) {
+    const evidence = extractObservationEvidence(run.points);
+    for (const measured of evidence.measuredSegments) {
+      const elapsed = measured.elapsedMs / MINUTE;
+      if (elapsed <= 0 || elapsed > 120) continue;
+      const minutesPerPercent =
+        elapsed / (measured.toLevel - measured.fromLevel);
+      if (minutesPerPercent < 0.1 || minutesPerPercent > 40) {
+        continue;
+      }
+      segments.push({
+        from: measured.fromLevel,
+        to: measured.toLevel,
+        elapsedMinutes: elapsed,
+        minutesPerPercent,
+        sessionId: measured.sessionId,
+      });
+    }
+  }
+  return segments;
+};
+
+const toLegacySegments = (runs: Run[]): Segment[] => {
+  const segments: Segment[] = [];
+  for (const run of runs) {
     for (let index = 1; index < run.points.length; index++) {
       const before = run.points[index - 1];
       const after = run.points[index];
-      const elapsed = (after.time - before.time) / MINUTE;
-      if (after.level <= before.level || elapsed <= 0 || elapsed > 120)
+      if (
+        (before.origin !== undefined && before.origin !== "legacy") ||
+        (after.origin !== undefined && after.origin !== "legacy")
+      ) {
         continue;
+      }
+      const elapsed = (after.time - before.time) / MINUTE;
+      if (after.level <= before.level || elapsed <= 0 || elapsed > 120) {
+        continue;
+      }
       const minutesPerPercent = elapsed / (after.level - before.level);
       if (minutesPerPercent < 0.1 || minutesPerPercent > 40) continue;
       segments.push({
         from: before.level,
         to: after.level,
+        elapsedMinutes: elapsed,
         minutesPerPercent,
         sessionId: run.sessionId,
       });
@@ -130,7 +161,6 @@ const toSegments = (runs: Run[]): Segment[] => {
   }
   return segments;
 };
-
 const estimateFromSegments = (
   segments: Segment[],
   start: number
@@ -231,11 +261,9 @@ export const predictChargingCurve = (
   ) {
     return undefined;
   }
-  const chargingObserved = points.some(
-    (point, index) =>
-      index > 0 &&
-      point.level > points[index - 1].level &&
-      last.time - point.time <= RISE_WINDOW
+  const activeEvidence = extractObservationEvidence(points);
+  const chargingObserved = activeEvidence.transitions.some(
+    (arrival) => last.time - arrival.at <= RISE_WINDOW
   );
 
   const history = runs.filter((run) => run.sessionId !== currentSessionId);
@@ -251,22 +279,39 @@ export const predictChargingCurve = (
     let baseline = median(exact.map((run) => run.minutes));
     let coverage = exact.length ? 1 : 0;
     let runCount = exact.length;
+    const verifiedFullRun = exact.length > 0;
 
     if (baseline === undefined) {
-      const partial = estimateFromSegments(toSegments(history), currentLevel);
-      const nearTargetWasMeasured = history.some(
-        (run) =>
-          run.points.length > 1 &&
-          run.points.some((point) => point.level >= targetLevel - 2)
+      const verifiedSegments = toSegments(history);
+      const partial = estimateFromSegments(verifiedSegments, currentLevel);
+      const nearTargetWasObserved = verifiedSegments.some(
+        (segment) => segment.to >= targetLevel - 2
       );
       if (
         partial &&
         (complete.length > 0 ||
-          (partial.coverage >= 0.7 && nearTargetWasMeasured))
+          (partial.coverage >= 0.7 && nearTargetWasObserved))
       ) {
         baseline = partial.minutes;
         coverage = partial.coverage;
         runCount = partial.runCount;
+      }
+    }
+
+    if (baseline === undefined) {
+      const legacySegments = toLegacySegments(history);
+      const legacy = estimateFromSegments(legacySegments, currentLevel);
+      const legacyNearTarget = history.some((run) =>
+        run.points.some(
+          (point) =>
+            (point.origin === undefined || point.origin === "legacy") &&
+            point.level >= targetLevel - 2
+        )
+      );
+      if (legacy && legacy.coverage >= 0.7 && legacyNearTarget) {
+        baseline = legacy.minutes;
+        coverage = legacy.coverage;
+        runCount = legacy.runCount;
       }
     }
 
@@ -299,27 +344,23 @@ export const predictChargingCurve = (
         targetLevel,
         historicalRunCount: runCount,
         adaptedToLive,
-        provisional: coverage < 1 || !chargingObserved,
+        provisional: !verifiedFullRun || coverage < 1 || !chargingObserved,
         chargingObserved,
       };
     }
   }
 
-  if (!chargingObserved || points.length < 2) return undefined;
-  const recent = points.filter(
-    (point) => last.time - point.time <= RISE_WINDOW
+  if (!chargingObserved) return undefined;
+  const latestMeasured = toSegments([active]).find(
+    (segment) => segment.to === currentLevel
   );
-  const first = recent.find(
-    (point) =>
-      last.time - point.time >= 2 * MINUTE && last.level - point.level >= 1
-  );
-  if (!first) return undefined;
-  const rate = (last.level - first.level) / ((last.time - first.time) / MINUTE);
+  if (!latestMeasured || latestMeasured.elapsedMinutes < 2) return undefined;
+  const rate = latestMeasured.minutesPerPercent;
   if (!Number.isFinite(rate) || rate <= 0) return undefined;
   return {
     remainingMinutes: Math.max(
       1,
-      Math.ceil((targetLevel - currentLevel) / rate)
+      Math.ceil((targetLevel - currentLevel) * rate)
     ),
     source: "live",
     targetLevel,

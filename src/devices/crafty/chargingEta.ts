@@ -45,7 +45,11 @@ const isBatterySample = (
     (point.breakBefore === undefined ||
       typeof point.breakBefore === "boolean") &&
     (point.continuousSincePrevious === undefined ||
-      typeof point.continuousSincePrevious === "boolean")
+      typeof point.continuousSincePrevious === "boolean") &&
+    (point.origin === undefined ||
+      point.origin === "snapshot" ||
+      point.origin === "notification" ||
+      point.origin === "legacy")
   );
 };
 
@@ -80,7 +84,10 @@ export const recordBatterySample = (
   time = Date.now(),
   sessionId: string,
   history: BatterySample[] = readChargingHistory(deviceId, time),
-  flags: Pick<BatterySample, "breakBefore" | "continuousSincePrevious"> = {}
+  flags: Pick<
+    BatterySample,
+    "breakBefore" | "continuousSincePrevious" | "origin"
+  > = {}
 ): BatterySample[] => {
   if (
     !Number.isFinite(level) ||
@@ -106,6 +113,7 @@ export const recordBatterySample = (
       level,
       time,
       sessionId,
+      ...(flags.origin ? { origin: flags.origin } : {}),
       ...(flags.breakBefore ? { breakBefore: true } : {}),
       ...(flags.continuousSincePrevious === true && !flags.breakBefore
         ? { continuousSincePrevious: true }

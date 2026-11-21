@@ -2,7 +2,12 @@ import { createEffect, createSignal, onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { AnalysisResult } from "../shared/analysis";
 import { createDebouncedWriter } from "../shared/debouncedWriter";
-import type { CraftyDriver, CraftyUpdate, CraftyValues } from "./driver";
+import type {
+  CraftyDriver,
+  CraftyUpdate,
+  CraftyUpdateOrigin,
+  CraftyValues,
+} from "./driver";
 import {
   analyzeCrafty,
   clamp,
@@ -32,6 +37,7 @@ export interface CraftyState extends CraftyValues {
   loaded: boolean;
   batteryReadingAt: number | undefined;
   batteryReadingId: number;
+  batteryReadingOrigin: CraftyUpdateOrigin | undefined;
 }
 
 /**
@@ -47,6 +53,7 @@ export const createCraftyStore = (
     loaded: false,
     batteryReadingAt: undefined,
     batteryReadingId: 0,
+    batteryReadingOrigin: undefined,
     targetTemp: 0,
     currentTemp: 0,
     boostTemp: 0,
@@ -69,7 +76,10 @@ export const createCraftyStore = (
     holdAfterWriteMs: IGNORE_UPDATES_AFTER_WRITE_MS,
   });
 
-  const handleUpdate = (update: CraftyUpdate) => {
+  const handleUpdate = (
+    update: CraftyUpdate,
+    origin: CraftyUpdateOrigin = "snapshot"
+  ) => {
     const next: CraftyUpdate = { ...update };
     for (const field of Object.keys(next) as (keyof CraftyUpdate)[]) {
       if (writer.isHeld(field as DebouncedField)) delete next[field];
@@ -81,6 +91,7 @@ export const createCraftyStore = (
         : {
             batteryReadingAt: Date.now(),
             batteryReadingId: ++batteryReadingSequence,
+            batteryReadingOrigin: origin,
           }),
     });
   };

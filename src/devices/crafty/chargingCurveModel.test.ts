@@ -11,9 +11,19 @@ const point = (
   at: number,
   sessionId: string,
   flags: Partial<
-    Pick<BatteryCurveSample, "breakBefore" | "continuousSincePrevious">
+    Pick<
+      BatteryCurveSample,
+      "breakBefore" | "continuousSincePrevious" | "origin"
+    >
   > = {}
-): BatteryCurveSample => ({ level, time: minute(at), sessionId, ...flags });
+): BatteryCurveSample => ({
+  level,
+  time: minute(at),
+  sessionId,
+  origin: "notification",
+  continuousSincePrevious: true,
+  ...flags,
+});
 
 const completed99 = [
   point(60, 0, "old"),
@@ -119,7 +129,7 @@ describe("Crafty+ historical ETA to 99%", () => {
     const interrupted = [
       point(60, 0, "old"),
       point(80, 10, "old"),
-      point(99, 100, "old"),
+      point(99, 100, "old", { continuousSincePrevious: false }),
     ];
     expect(
       predictChargingCurve(
@@ -234,12 +244,12 @@ describe("Crafty+ historical ETA to 99%", () => {
 
   it("uses legacy 100% runs as a curve only through 99%", () => {
     const old100 = [
-      point(60, 0, "legacy"),
-      point(70, 10, "legacy"),
-      point(80, 20, "legacy"),
-      point(90, 30, "legacy"),
-      point(95, 36, "legacy"),
-      point(100, 45, "legacy"),
+      point(60, 0, "legacy", { origin: "legacy" }),
+      point(70, 10, "legacy", { origin: "legacy" }),
+      point(80, 20, "legacy", { origin: "legacy" }),
+      point(90, 30, "legacy", { origin: "legacy" }),
+      point(95, 36, "legacy", { origin: "legacy" }),
+      point(100, 45, "legacy", { origin: "legacy" }),
     ];
     expect(
       predictChargingCurve(
@@ -249,5 +259,59 @@ describe("Crafty+ historical ETA to 99%", () => {
         minute(100)
       )
     ).toMatchObject({ targetLevel: 99, remainingMinutes: 24 });
+  });
+
+  it("uses a single current snapshot to show an immediate historical ETA", () => {
+    expect(
+      predictChargingCurve(
+        [...completed99, point(80, 100, "new", { origin: "snapshot" })],
+        80,
+        "new",
+        minute(100)
+      )
+    ).toMatchObject({
+      source: "history",
+      remainingMinutes: 28,
+      chargingObserved: false,
+      provisional: true,
+    });
+  });
+
+  it("does not use a historical snapshot as an exact starting crossing", () => {
+    const history = [
+      point(80, 0, "old", { origin: "snapshot" }),
+      point(81, 3, "old"),
+      point(82, 5, "old"),
+      point(90, 15, "old"),
+      point(95, 23, "old"),
+      point(99, 31, "old"),
+    ];
+    const prediction = predictChargingCurve(
+      [...history, point(80, 100, "new", { origin: "snapshot" })],
+      80,
+      "new",
+      minute(100)
+    );
+    expect(prediction).toMatchObject({
+      source: "history",
+      provisional: true,
+    });
+    expect(prediction?.remainingMinutes).toBeGreaterThan(0);
+  });
+
+  it("does not train from snapshot-to-notification intervals", () => {
+    const history = [
+      point(80, 0, "old", { origin: "snapshot" }),
+      point(81, 10, "old"),
+      point(82, 12, "old"),
+    ];
+    expect(
+      predictChargingCurve(
+        [...history, point(81, 100, "new", { origin: "snapshot" })],
+        81,
+        "new",
+        minute(100)
+      )
+    ).toBeUndefined();
   });
 });

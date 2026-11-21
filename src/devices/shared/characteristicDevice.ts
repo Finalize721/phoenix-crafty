@@ -7,7 +7,11 @@ import type PQueue from "p-queue";
  */
 
 export type Reader<Values> = (value: DataView) => Partial<Values>;
-export type UpdateListener<Values> = (update: Partial<Values>) => void;
+export type UpdateOrigin = "snapshot" | "notification";
+export type UpdateListener<Values> = (
+  update: Partial<Values>,
+  origin?: UpdateOrigin
+) => void;
 
 export interface CharacteristicDevice<Key extends string, Values> {
   subscribe(listener: UpdateListener<Values>): () => void;
@@ -37,8 +41,8 @@ export const createCharacteristicDevice = <Key extends string, Values>(
   >();
   let disposed = false;
 
-  const emit = (update: Partial<Values>) => {
-    for (const listener of listeners) listener(update);
+  const emit = (update: Partial<Values>, origin: UpdateOrigin) => {
+    for (const listener of listeners) listener(update, origin);
   };
 
   const require = (key: Key) => {
@@ -54,7 +58,7 @@ export const createCharacteristicDevice = <Key extends string, Values>(
     const reader = readers[key];
     if (!characteristic || !reader || disposed) return;
     const value = await queue.add(() => characteristic.readValue());
-    if (value && !disposed) emit(reader(value));
+    if (value && !disposed) emit(reader(value), "snapshot");
   };
 
   const start = async () => {
@@ -69,7 +73,7 @@ export const createCharacteristicDevice = <Key extends string, Values>(
       const handler = (event: Event) => {
         const value = (event.target as BluetoothRemoteGATTCharacteristic | null)
           ?.value;
-        if (value) emit(reader(value));
+        if (value) emit(reader(value), "notification");
       };
       await queue.add(() => characteristic.startNotifications());
       if (disposed) {

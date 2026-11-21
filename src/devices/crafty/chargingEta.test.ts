@@ -29,7 +29,8 @@ describe("Crafty charging ETA integration", () => {
       80,
       minute(100),
       "new",
-      history
+      history,
+      { origin: "snapshot" }
     );
 
     expect(estimateChargingEta(samples, 80, "new", minute(100))).toMatchObject({
@@ -92,6 +93,28 @@ describe("Crafty charging ETA integration", () => {
     });
   });
 
+  it("persists observation provenance without changing the storage key", () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    try {
+      const stored = recordBatterySample(
+        "crafty",
+        80,
+        minute(100),
+        "session",
+        [],
+        { origin: "snapshot" }
+      );
+      expect(stored[0].origin).toBe("snapshot");
+      expect(storage.has("craftyChargingHistory:crafty")).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("treats 99% as complete and never predicts a 100% ETA", () => {
     expect(
       estimateChargingEta(
@@ -113,8 +136,19 @@ describe("Crafty charging ETA integration", () => {
 
   it("marks the live fallback as provisional and charging-observed", () => {
     const samples = [
-      { level: 80, time: minute(100), sessionId: "new" },
-      { level: 81, time: minute(102), sessionId: "new" },
+      {
+        level: 80,
+        time: minute(100),
+        sessionId: "new",
+        origin: "notification" as const,
+      },
+      {
+        level: 81,
+        time: minute(102),
+        sessionId: "new",
+        origin: "notification" as const,
+        continuousSincePrevious: true,
+      },
     ];
     expect(estimateChargingEta(samples, 81, "new", minute(102))).toMatchObject({
       source: "live",
