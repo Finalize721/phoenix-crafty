@@ -2,11 +2,14 @@ import Bluetooth from "lucide-solid/icons/bluetooth";
 import BluetoothOff from "lucide-solid/icons/bluetooth-off";
 import Coffee from "lucide-solid/icons/coffee";
 import LoaderCircle from "lucide-solid/icons/loader-circle";
+import Moon from "lucide-solid/icons/moon";
 import Power from "lucide-solid/icons/power";
+import Sun from "lucide-solid/icons/sun";
 import { type JSX, Match, Show, Switch } from "solid-js";
 import { useWakeLock } from "../hooks/utils/useWakeLock";
 import { m } from "../paraglide/messages";
 import { type DeviceInfo, useBluetooth } from "../provider/BluetoothProvider";
+import { useDarkMode } from "../provider/DarkModeProvider";
 import {
   getScreenAwakePreference,
   isScreenWakeLockSupported,
@@ -34,6 +37,24 @@ const DEVICE_TYPE_LABELS: Partial<Record<DeviceType, string>> = {
 /** Friendly device name, e.g. "Volcano Hybrid" instead of "S&B VOLCANO H" */
 export const deviceLabel = (device: Pick<DeviceInfo, "type" | "name">) =>
   DEVICE_TYPE_LABELS[device.type] ?? device.name;
+
+export const ThemeToggle = () => {
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
+  return (
+    <Button
+      variant="outline"
+      size="icon"
+      class="text-muted-foreground"
+      aria-label={m.settings_darkMode()}
+      aria-pressed={isDarkMode()}
+      onClick={() => toggleDarkMode(!isDarkMode())}
+    >
+      <Show when={isDarkMode()} fallback={<Moon />}>
+        <Sun />
+      </Show>
+    </Button>
+  );
+};
 
 export const CaffeineToggle = () => {
   const { connectionState } = useBluetooth();
@@ -140,6 +161,7 @@ export const AppHeader = (props: AppHeaderProps) => {
         </div>
       </div>
       {props.trailing}
+      <ThemeToggle />
       <CaffeineToggle />
       <Show when={isConnected()}>
         <DisconnectButton />

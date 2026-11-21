@@ -1,6 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "settings_title": "Settings",
+  "settings_darkMode": "Dark Mode",
   "settings_standbyLight": "Standby Light",
   "settings_vibration": "Vibration",
   "settings_autoShutdownTime": "Automatic Shutdown Time",
