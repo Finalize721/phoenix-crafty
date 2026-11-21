@@ -7,7 +7,9 @@ import {
   type BatterySample,
   estimateChargingEta,
   readChargingHistory,
+  readUserChargingHintAt,
   recordBatterySample,
+  saveUserChargingHintAt,
 } from "./chargingEta";
 
 const minute = (value: number) => value * 60_000;
@@ -41,6 +43,49 @@ describe("Crafty charging ETA integration", () => {
       chargingObserved: false,
       expiresAt: minute(130),
     });
+  });
+
+  it("keeps falling observations and persists heater state", () => {
+    const first = recordBatterySample(
+      "crafty",
+      82,
+      minute(100),
+      "session",
+      [],
+      { origin: "snapshot", heaterActive: false }
+    );
+    const decreased = recordBatterySample(
+      "crafty",
+      80,
+      minute(102),
+      "session",
+      first,
+      {
+        origin: "notification",
+        continuousSincePrevious: true,
+        heaterActive: true,
+      }
+    );
+    expect(decreased).toHaveLength(2);
+    expect(decreased[0].heaterActive).toBe(false);
+    expect(decreased[1]).toMatchObject({ level: 80, heaterActive: true });
+  });
+
+  it("stores manual display requests only for a short per-device window", () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    });
+    try {
+      saveUserChargingHintAt("crafty", minute(100));
+      expect(readUserChargingHintAt("crafty", minute(102))).toBe(minute(100));
+      expect(readUserChargingHintAt("crafty", minute(104))).toBeUndefined();
+      expect(storage.has("craftyChargingHint:crafty")).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("preserves the existing per-device storage key and legacy sample format", () => {
@@ -141,6 +186,7 @@ describe("Crafty charging ETA integration", () => {
         time: minute(100),
         sessionId: "new",
         origin: "notification" as const,
+        heaterActive: false,
       },
       {
         level: 81,
@@ -148,9 +194,18 @@ describe("Crafty charging ETA integration", () => {
         sessionId: "new",
         origin: "notification" as const,
         continuousSincePrevious: true,
+        heaterActive: false,
+      },
+      {
+        level: 82,
+        time: minute(104),
+        sessionId: "new",
+        origin: "notification" as const,
+        continuousSincePrevious: true,
+        heaterActive: false,
       },
     ];
-    expect(estimateChargingEta(samples, 81, "new", minute(102))).toMatchObject({
+    expect(estimateChargingEta(samples, 82, "new", minute(104))).toMatchObject({
       source: "live",
       targetLevel: 99,
       provisional: true,

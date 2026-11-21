@@ -13,7 +13,7 @@ const point = (
   flags: Partial<
     Pick<
       BatteryCurveSample,
-      "breakBefore" | "continuousSincePrevious" | "origin"
+      "breakBefore" | "continuousSincePrevious" | "origin" | "heaterActive"
     >
   > = {}
 ): BatteryCurveSample => ({
@@ -22,6 +22,7 @@ const point = (
   sessionId,
   origin: "notification",
   continuousSincePrevious: true,
+  heaterActive: false,
   ...flags,
 });
 
@@ -97,10 +98,15 @@ describe("Crafty+ historical ETA to 99%", () => {
   it("uses history after live progress and marks charging observed", () => {
     expect(
       predictChargingCurve(
-        [...completed99, point(80, 100, "new"), point(81, 103, "new")],
-        81,
+        [
+          ...completed99,
+          point(80, 100, "new", { origin: "snapshot" }),
+          point(81, 103, "new"),
+          point(82, 106, "new"),
+        ],
+        82,
         "new",
-        minute(103)
+        minute(106)
       )
     ).toMatchObject({
       source: "history",
@@ -159,7 +165,7 @@ describe("Crafty+ historical ETA to 99%", () => {
     ).toMatchObject({ source: "history", provisional: true });
   });
 
-  it("uses reliable fragments from a run interrupted before the near-full segment", () => {
+  it("does not use a near-full fragment separated by an interruption", () => {
     const partial = [
       point(60, 0, "old"),
       point(70, 10, "old"),
@@ -174,7 +180,7 @@ describe("Crafty+ historical ETA to 99%", () => {
         "new",
         minute(200)
       )
-    ).toMatchObject({ source: "history", provisional: true });
+    ).toBeUndefined();
   });
 
   it("does not extrapolate early-only history to 99%", () => {
@@ -194,7 +200,7 @@ describe("Crafty+ historical ETA to 99%", () => {
     ).toBeUndefined();
   });
 
-  it("allows a provisional live fallback after a 1% rise in two minutes", () => {
+  it("does not use a one-step live rise as a charging rate", () => {
     expect(
       predictChargingCurve(
         [point(80, 100, "new"), point(81, 103, "new")],
@@ -202,12 +208,7 @@ describe("Crafty+ historical ETA to 99%", () => {
         "new",
         minute(103)
       )
-    ).toMatchObject({
-      source: "live",
-      chargingObserved: true,
-      provisional: true,
-      targetLevel: 99,
-    });
+    ).toBeUndefined();
   });
 
   it("rejects a one-minute jump as insufficient live evidence", () => {
@@ -297,6 +298,26 @@ describe("Crafty+ historical ETA to 99%", () => {
       provisional: true,
     });
     expect(prediction?.remainingMinutes).toBeGreaterThan(0);
+  });
+
+  it("keeps older provenance-tagged history usable only provisionally", () => {
+    const olderHistory = completed99.map(
+      // Older saved samples did not record heater state.
+      ({ heaterActive: _heaterActive, ...sample }) => sample
+    );
+    expect(
+      predictChargingCurve(
+        [...olderHistory, point(80, 100, "new", { origin: "snapshot" })],
+        80,
+        "new",
+        minute(100)
+      )
+    ).toMatchObject({
+      source: "history",
+      remainingMinutes: 28,
+      chargingObserved: false,
+      provisional: true,
+    });
   });
 
   it("does not train from snapshot-to-notification intervals", () => {

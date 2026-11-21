@@ -1,4 +1,5 @@
 import { isWithinHistoryRetention } from "../../utils/historyRetention";
+import { DEFAULT_USER_HINT_MAX_AGE_MS } from "./chargingActivity";
 import {
   type BatteryCurveSample,
   type CurvePrediction,
@@ -12,11 +13,60 @@ export interface ChargingEta extends CurvePrediction {
 }
 
 const STORAGE_KEY = "craftyChargingHistory";
+const USER_HINT_STORAGE_KEY = "craftyChargingHint";
 const MAX_SAMPLES = 2_500;
 const MAX_ESTIMATE_AGE_MS = 30 * 60_000;
 
 const storageKey = (deviceId: string) =>
   `${STORAGE_KEY}:${encodeURIComponent(deviceId)}`;
+const userHintStorageKey = (deviceId: string) =>
+  `${USER_HINT_STORAGE_KEY}:${encodeURIComponent(deviceId)}`;
+
+export const readUserChargingHintAt = (
+  deviceId: string,
+  now = Date.now()
+): number | undefined => {
+  if (typeof localStorage === "undefined") return undefined;
+  const key = userHintStorageKey(deviceId);
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored === null) return undefined;
+    const timestamp = Number(stored);
+    if (
+      !Number.isFinite(timestamp) ||
+      timestamp > now ||
+      now - timestamp > DEFAULT_USER_HINT_MAX_AGE_MS
+    ) {
+      localStorage.removeItem(key);
+      return undefined;
+    }
+    return timestamp;
+  } catch {
+    return undefined;
+  }
+};
+
+export const saveUserChargingHintAt = (
+  deviceId: string,
+  timestamp: number
+): void => {
+  if (typeof localStorage === "undefined" || !Number.isFinite(timestamp))
+    return;
+  try {
+    localStorage.setItem(userHintStorageKey(deviceId), String(timestamp));
+  } catch {
+    // The manual estimate remains available for this session.
+  }
+};
+
+export const clearUserChargingHintAt = (deviceId: string): void => {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.removeItem(userHintStorageKey(deviceId));
+  } catch {
+    // The hint also expires automatically.
+  }
+};
 
 const storeHistory = (deviceId: string, history: BatterySample[]): void => {
   if (typeof localStorage === "undefined") return;
@@ -46,6 +96,8 @@ const isBatterySample = (
       typeof point.breakBefore === "boolean") &&
     (point.continuousSincePrevious === undefined ||
       typeof point.continuousSincePrevious === "boolean") &&
+    (point.heaterActive === undefined ||
+      typeof point.heaterActive === "boolean") &&
     (point.origin === undefined ||
       point.origin === "snapshot" ||
       point.origin === "notification" ||
@@ -86,7 +138,7 @@ export const recordBatterySample = (
   history: BatterySample[] = readChargingHistory(deviceId, time),
   flags: Pick<
     BatterySample,
-    "breakBefore" | "continuousSincePrevious" | "origin"
+    "breakBefore" | "continuousSincePrevious" | "origin" | "heaterActive"
   > = {}
 ): BatterySample[] => {
   if (
@@ -117,6 +169,9 @@ export const recordBatterySample = (
       ...(flags.breakBefore ? { breakBefore: true } : {}),
       ...(flags.continuousSincePrevious === true && !flags.breakBefore
         ? { continuousSincePrevious: true }
+        : {}),
+      ...(flags.heaterActive !== undefined
+        ? { heaterActive: flags.heaterActive }
         : {}),
     },
   ].slice(-MAX_SAMPLES);

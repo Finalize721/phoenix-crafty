@@ -1,7 +1,7 @@
+import { findChargingIntervals } from "./chargingActivity";
 import {
   type BatteryObservationOrigin,
   boundPercentArrival,
-  extractObservationEvidence,
   isArrivalConsistentWithBounds,
 } from "./observationQuality";
 
@@ -12,6 +12,7 @@ export interface BatteryCurveSample {
   origin?: BatteryObservationOrigin;
   breakBefore?: boolean;
   continuousSincePrevious?: boolean;
+  heaterActive?: boolean;
 }
 
 export interface CurvePrediction {
@@ -85,62 +86,54 @@ export const splitChargingRuns = (samples: BatteryCurveSample[]): Run[] => {
 };
 
 const atLevel = (run: Run, level: number): number | undefined => {
-  const evidence = extractObservationEvidence(run.points);
   const bounds = boundPercentArrival(run.points, level, run.sessionId);
-  const observed = evidence.transitions.find(
-    (arrival) => arrival.level === level
-  );
-  if (observed && isArrivalConsistentWithBounds(observed.at, bounds)) {
-    return observed.at;
-  }
-  for (const segment of evidence.measuredSegments) {
-    const arrival = segment.arrivals.find((item) => item.level === level);
-    if (arrival && isArrivalConsistentWithBounds(arrival.at, bounds)) {
-      return arrival.at;
-    }
+  for (const interval of findChargingIntervals(run.points)) {
+    if (level <= interval.from || level > interval.to) continue;
+    const arrival =
+      interval.startTime +
+      ((level - interval.from) / (interval.to - interval.from)) *
+        (interval.endTime - interval.startTime);
+    if (isArrivalConsistentWithBounds(arrival, bounds)) return arrival;
   }
   return undefined;
 };
 
-const observedTarget = (run: Run): boolean => {
-  return (
-    extractObservationEvidence(run.points).observed99ArrivalAt !== undefined
-  );
-};
+const observedTarget = (run: Run): boolean => atLevel(run, 99) !== undefined;
 
 const toSegments = (runs: Run[]): Segment[] => {
   const segments: Segment[] = [];
   for (const run of runs) {
-    const evidence = extractObservationEvidence(run.points);
-    for (const measured of evidence.measuredSegments) {
-      const elapsed = measured.elapsedMs / MINUTE;
+    for (const interval of findChargingIntervals(run.points)) {
+      const elapsed = interval.elapsedMinutes;
       if (elapsed <= 0 || elapsed > 120) continue;
-      const minutesPerPercent =
-        elapsed / (measured.toLevel - measured.fromLevel);
+      const minutesPerPercent = elapsed / (interval.to - interval.from);
       if (minutesPerPercent < 0.1 || minutesPerPercent > 40) {
         continue;
       }
       segments.push({
-        from: measured.fromLevel,
-        to: measured.toLevel,
+        from: interval.from,
+        to: interval.to,
         elapsedMinutes: elapsed,
         minutesPerPercent,
-        sessionId: measured.sessionId,
+        sessionId: interval.sessionId,
       });
     }
   }
   return segments;
 };
 
-const toLegacySegments = (runs: Run[]): Segment[] => {
+/** Older, uncertain history may support an estimate, never verified rates. */
+const toProvisionalSegments = (runs: Run[]): Segment[] => {
   const segments: Segment[] = [];
   for (const run of runs) {
     for (let index = 1; index < run.points.length; index++) {
       const before = run.points[index - 1];
       const after = run.points[index];
       if (
-        (before.origin !== undefined && before.origin !== "legacy") ||
-        (after.origin !== undefined && after.origin !== "legacy")
+        before.heaterActive === true ||
+        after.heaterActive === true ||
+        before.origin === "snapshot" ||
+        after.origin === "snapshot"
       ) {
         continue;
       }
@@ -261,9 +254,9 @@ export const predictChargingCurve = (
   ) {
     return undefined;
   }
-  const activeEvidence = extractObservationEvidence(points);
-  const chargingObserved = activeEvidence.transitions.some(
-    (arrival) => last.time - arrival.at <= RISE_WINDOW
+  const activeIntervals = findChargingIntervals(points);
+  const chargingObserved = activeIntervals.some(
+    (interval) => last.time - interval.endTime <= RISE_WINDOW
   );
 
   const history = runs.filter((run) => run.sessionId !== currentSessionId);
@@ -299,19 +292,23 @@ export const predictChargingCurve = (
     }
 
     if (baseline === undefined) {
-      const legacySegments = toLegacySegments(history);
-      const legacy = estimateFromSegments(legacySegments, currentLevel);
-      const legacyNearTarget = history.some((run) =>
+      const provisionalSegments = toProvisionalSegments(history);
+      const provisional = estimateFromSegments(
+        provisionalSegments,
+        currentLevel
+      );
+      const nearTargetWasObserved = history.some((run) =>
         run.points.some(
           (point) =>
-            (point.origin === undefined || point.origin === "legacy") &&
+            point.heaterActive !== true &&
+            point.origin !== "snapshot" &&
             point.level >= targetLevel - 2
         )
       );
-      if (legacy && legacy.coverage >= 0.7 && legacyNearTarget) {
-        baseline = legacy.minutes;
-        coverage = legacy.coverage;
-        runCount = legacy.runCount;
+      if (provisional && provisional.coverage >= 0.7 && nearTargetWasObserved) {
+        baseline = provisional.minutes;
+        coverage = provisional.coverage;
+        runCount = provisional.runCount;
       }
     }
 

@@ -19,10 +19,17 @@ import { ShutdownTime } from "../components/crafty/ShutdownTime";
 import { Temperature } from "../components/crafty/Temperature";
 import { DeviceShell } from "../components/DeviceShell";
 import {
+  assessChargingActivity,
+  type ChargingEvidence,
+} from "../devices/crafty/chargingActivity";
+import {
   type BatterySample,
+  clearUserChargingHintAt,
   estimateChargingEta,
   readChargingHistory,
+  readUserChargingHintAt,
   recordBatterySample,
+  saveUserChargingHintAt,
 } from "../devices/crafty/chargingEta";
 import {
   SESSION_EXTENSION_DURATIONS,
@@ -152,12 +159,22 @@ const CraftyBattery = () => {
 };
 
 const CraftyChargingEta = () => {
-  const { state, isCraftyPlus } = useCrafty();
+  const { state, derived, isCraftyPlus } = useCrafty();
   const { connectionState, deviceInfo, knownDevice } = useBluetooth();
   const [eta, setEta] = createSignal<
     (ReturnType<typeof estimateChargingEta> & { fullAt?: number }) | undefined
   >();
+  const [activity, setActivity] = createSignal<ChargingEvidence>({
+    state: "unknown",
+    showEta: false,
+    manualOnly: false,
+    canComputeHistoricalEta: false,
+    chargingIntervals: [],
+  });
   const [now, setNow] = createSignal(Date.now());
+  const [userChargingHintAt, setUserChargingHintAt] = createSignal<number>();
+  const [sampleVersion, setSampleVersion] = createSignal(0);
+  const [continuityVersion, setContinuityVersion] = createSignal(0);
   const updateClock = () => setNow(Date.now());
   const clockTimer = setInterval(updateClock, 60_000);
   let historyId: string | undefined;
@@ -171,7 +188,19 @@ const CraftyChargingEta = () => {
   const markDiscontinuity = () => {
     breakBeforeNextSample = true;
     continuityValid = false;
+    setContinuityVersion((version) => version + 1);
   };
+  let wasHeaterActive = derived.isHeaterActive();
+  createEffect(() => {
+    const heaterActive = derived.isHeaterActive();
+    if (heaterActive === wasHeaterActive) return;
+    wasHeaterActive = heaterActive;
+    markDiscontinuity();
+    if (heaterActive && historyId) {
+      clearUserChargingHintAt(historyId);
+      setUserChargingHintAt(undefined);
+    }
+  });
   const calculateEta = (
     history: BatterySample[],
     level: number,
@@ -217,6 +246,56 @@ const CraftyChargingEta = () => {
   );
 
   createEffect(() => {
+    sampleVersion();
+    continuityVersion();
+    const currentNow = now();
+    const activeSessionId = sessionId;
+    const id = historyId;
+    const heaterActive = derived.isHeaterActive();
+    const hintAt = userChargingHintAt();
+    if (
+      !state.loaded ||
+      !isCraftyPlus ||
+      !id ||
+      !activeSessionId ||
+      connectionState() !== ConnectionState.CONNECTED
+    ) {
+      setActivity({
+        state: "unknown",
+        showEta: false,
+        manualOnly: false,
+        canComputeHistoricalEta: false,
+        chargingIntervals: [],
+      });
+      return;
+    }
+    let evidence = assessChargingActivity(samples, activeSessionId, {
+      now: currentNow,
+      userChargingHintAt: hintAt,
+    });
+    if (heaterActive) {
+      evidence = {
+        ...evidence,
+        state: "using",
+        showEta: false,
+        manualOnly: false,
+      };
+    } else if (breakBeforeNextSample && evidence.state === "charging-likely") {
+      const manualHintIsFresh =
+        hintAt !== undefined &&
+        currentNow >= hintAt &&
+        currentNow - hintAt <= 3 * 60_000;
+      evidence = {
+        ...evidence,
+        state: "unknown",
+        showEta: manualHintIsFresh,
+        manualOnly: manualHintIsFresh,
+      };
+    }
+    setActivity(evidence);
+  });
+
+  createEffect(() => {
     const connected = connectionState() === ConnectionState.CONNECTED;
     if (!connected) {
       markDiscontinuity();
@@ -245,6 +324,13 @@ const CraftyChargingEta = () => {
       historyId = id;
       sessionId = crypto.randomUUID();
       samples = readChargingHistory(id);
+      const savedHint = readUserChargingHintAt(id);
+      if (derived.isHeaterActive()) {
+        clearUserChargingHintAt(id);
+        setUserChargingHintAt(undefined);
+      } else {
+        setUserChargingHintAt(savedHint);
+      }
       breakBeforeNextSample = false;
       continuityValid = false;
     }
@@ -253,6 +339,10 @@ const CraftyChargingEta = () => {
     const now = readingTime;
     const visible = document.visibilityState === "visible";
     const previousSample = samples[samples.length - 1];
+    if (previousSample && level < previousSample.level) {
+      clearUserChargingHintAt(id);
+      setUserChargingHintAt(undefined);
+    }
     const nextSamples = recordBatterySample(
       id,
       level,
@@ -261,6 +351,7 @@ const CraftyChargingEta = () => {
       samples,
       {
         origin: state.batteryReadingOrigin ?? "snapshot",
+        heaterActive: derived.isHeaterActive(),
         ...(breakBeforeNextSample ? { breakBefore: true } : {}),
         ...(continuityValid && connected && visible
           ? { continuousSincePrevious: true }
@@ -274,6 +365,7 @@ const CraftyChargingEta = () => {
       latestSample.level === level &&
       latestSample.sessionId === activeSessionId;
     samples = nextSamples;
+    setSampleVersion((version) => version + 1);
     if (recorded) {
       breakBeforeNextSample = !connected || !visible;
       continuityValid = connected && visible;
@@ -309,50 +401,85 @@ const CraftyChargingEta = () => {
       hour: "2-digit",
       minute: "2-digit",
     }).format(fullAt);
+  const canShowEta = () =>
+    Boolean(eta()) && activity().showEta && !derived.isHeaterActive();
+  const visibleEta = () => (canShowEta() ? eta() : undefined);
+  const canOfferManualEta = () =>
+    Boolean(eta()) &&
+    activity().canComputeHistoricalEta &&
+    activity().state === "unknown" &&
+    (!activity().showEta || activity().manualOnly) &&
+    !derived.isHeaterActive();
+  const showManualEta = () => {
+    if (!historyId || derived.isHeaterActive()) return;
+    const requestedAt = Date.now();
+    saveUserChargingHintAt(historyId, requestedAt);
+    setUserChargingHintAt(requestedAt);
+    updateClock();
+  };
+  const hideManualEta = () => {
+    if (historyId) clearUserChargingHintAt(historyId);
+    setUserChargingHintAt(undefined);
+  };
 
   return (
     <Show
       when={state.loaded && isCraftyPlus && state.batteryLevel >= 99}
       fallback={
-        <Show when={eta()}>
-          {(estimate) => (
-            <section
-              class="rounded-2xl border bg-card px-4 py-3 text-sm"
-              role="status"
-              aria-live="polite"
-            >
-              <p class="font-medium">
-                {estimate().chargingObserved
-                  ? m.device_isCharging()
-                  : "Historische Ladeprognose · Ladestatus unbestätigt"}
-              </p>
-              <Show when={estimate().provisional}>
-                <p class="text-xs text-muted-foreground">Vorläufig</p>
-              </Show>
-              <Show
-                when={estimate().fullAt}
-                fallback={
-                  <p class="text-muted-foreground">
-                    {m.device_etaCalculating()}
-                  </p>
-                }
+        <>
+          <Show when={visibleEta()}>
+            {(estimate) => (
+              <section
+                class="rounded-2xl border bg-card px-4 py-3 text-sm"
+                role="status"
+                aria-live="polite"
               >
-                {(fullAt) => (
-                  <>
+                <p class="font-medium">
+                  {activity().manualOnly
+                    ? m.device_historicalEtaUnconfirmed()
+                    : m.device_isLikelyCharging()}
+                </p>
+                <Show when={estimate().provisional || activity().manualOnly}>
+                  <p class="text-xs text-muted-foreground">
+                    {m.device_etaProvisional()}
+                  </p>
+                </Show>
+                <Show
+                  when={estimate().fullAt}
+                  fallback={
                     <p class="text-muted-foreground">
-                      {m.device_etaRemaining({
-                        duration: duration(remainingMinutes(fullAt())),
-                      })}
+                      {m.device_etaCalculating()}
                     </p>
-                    <p class="text-muted-foreground">
-                      {m.device_etaAt({ time: timeAtFull(fullAt()) })}
-                    </p>
-                  </>
-                )}
-              </Show>
-            </section>
-          )}
-        </Show>
+                  }
+                >
+                  {(fullAt) => (
+                    <>
+                      <p class="text-muted-foreground">
+                        {m.device_etaRemaining({
+                          duration: duration(remainingMinutes(fullAt())),
+                        })}
+                      </p>
+                      <p class="text-muted-foreground">
+                        {m.device_etaAt({ time: timeAtFull(fullAt()) })}
+                      </p>
+                    </>
+                  )}
+                </Show>
+              </section>
+            )}
+          </Show>
+          <Show when={canOfferManualEta()}>
+            <button
+              type="button"
+              class="rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground"
+              onClick={activity().manualOnly ? hideManualEta : showManualEta}
+            >
+              {activity().manualOnly
+                ? m.device_hideChargingEta()
+                : m.device_showChargingEta()}
+            </button>
+          </Show>
+        </>
       }
     >
       <section
