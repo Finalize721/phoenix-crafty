@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type BatteryCurveSample,
+  collectChargingRateSegments,
   predictChargingCurve,
   splitChargingRuns,
 } from "./chargingCurveModel";
@@ -276,6 +277,43 @@ describe("Crafty+ historical ETA to 99%", () => {
       chargingObserved: false,
       provisional: true,
     });
+  });
+
+  it("does not let isolated snapshots across app openings create charge rates", () => {
+    const isolatedSnapshots = [
+      point(30, 60, "opening-a", { origin: "snapshot" }),
+      point(40, 70, "opening-b", { origin: "snapshot" }),
+      point(40, 100, "current", { origin: "snapshot" }),
+    ];
+    expect(collectChargingRateSegments(isolatedSnapshots, "current")).toEqual({
+      verified: [],
+      provisional: [],
+    });
+    expect(
+      predictChargingCurve(isolatedSnapshots, 40, "current", minute(100))
+    ).toBeUndefined();
+  });
+
+  it("keeps an immediate historical ETA unchanged by isolated snapshots", () => {
+    const currentSnapshot = point(80, 100, "new", { origin: "snapshot" });
+    const withHistory = predictChargingCurve(
+      [...completed99, currentSnapshot],
+      80,
+      "new",
+      minute(100)
+    );
+    const withIsolatedSnapshots = predictChargingCurve(
+      [
+        ...completed99,
+        point(65, 50, "opening-a", { origin: "snapshot" }),
+        point(75, 70, "opening-b", { origin: "snapshot" }),
+        currentSnapshot,
+      ],
+      80,
+      "new",
+      minute(100)
+    );
+    expect(withIsolatedSnapshots).toEqual(withHistory);
   });
 
   it("does not use a historical snapshot as an exact starting crossing", () => {

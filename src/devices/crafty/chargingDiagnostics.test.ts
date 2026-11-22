@@ -7,8 +7,10 @@ import {
   appendChargingEtaTrace,
   classifyObserved99Arrival,
   createChargingDebugExport,
+  type EtaTraceSnapshot,
+  fingerprintBatterySamples,
 } from "./chargingDiagnostics";
-import type { BatterySample } from "./chargingEta";
+import { type BatterySample, diagnoseChargingEta } from "./chargingEta";
 
 const minute = (value: number) => value * 60_000;
 
@@ -100,6 +102,140 @@ describe("Crafty charging diagnostics", () => {
         coveredPercentPoints: 5,
         possiblePercentPoints: 74,
       });
+      expect(exported.observations.classificationCounts.interpolated).toBe(36);
+      expect(
+        exported.observations.interpolatedObservations
+          .verifiedIntervalArrivals[0].classificationReasons
+      ).toContain(
+        "interior_percentage_arrivals_interpolated_between_verified_notification_observations"
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("exports observation classification counts and reasons", () => {
+    const storage = new Map<string, string>([
+      [
+        "craftyChargingHistory:crafty",
+        JSON.stringify([
+          sample(80, 0, "isolated", "snapshot"),
+          sample(81, 10, "rejected-a", "snapshot"),
+          sample(82, 11, "rejected-b", "snapshot"),
+        ]),
+      ],
+    ]);
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+    });
+
+    try {
+      const exported = createChargingDebugExport(
+        "crafty",
+        { version: "1.0.4", gitCommit: "abc123" },
+        minute(100)
+      );
+      expect(
+        exported.observations.derivedClassifications.map(
+          (item) => item.classification
+        )
+      ).toContain("isolated_snapshot");
+      expect(exported.observations.classificationCounts).toMatchObject({
+        isolated: 3,
+        accepted: 0,
+        rejected: 3,
+        interpolated: 0,
+      });
+      expect(
+        exported.observations.derivedClassifications[0].classificationReasons
+      ).toContain("snapshot_is_not_an_exact_percentage_transition");
+      expect(exported.ruleAudit).toMatchObject({
+        explicitSnapshotsInProvisionalRateSegments: 0,
+        crossSessionSnapshotTransitionsRejected: 2,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reports legacy observations selected by the provisional curve as unverified", () => {
+    const history: BatterySample[] = [
+      { level: 60, time: minute(0), sessionId: "legacy", origin: "legacy" },
+      { level: 70, time: minute(10), sessionId: "legacy", origin: "legacy" },
+      { level: 80, time: minute(20), sessionId: "legacy", origin: "legacy" },
+      { level: 90, time: minute(30), sessionId: "legacy", origin: "legacy" },
+      { level: 95, time: minute(36), sessionId: "legacy", origin: "legacy" },
+      { level: 99, time: minute(45), sessionId: "legacy", origin: "legacy" },
+      sample(80, 100, "current", "snapshot"),
+    ];
+    const { estimate, diagnostics } = diagnoseChargingEta(
+      history,
+      80,
+      "current",
+      minute(100)
+    );
+    expect(estimate).toMatchObject({
+      source: "history",
+      provisional: true,
+    });
+
+    const storage = new Map<string, string>([
+      ["craftyChargingHistory:crafty", JSON.stringify(history)],
+    ]);
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    try {
+      const current = history[history.length - 1];
+      const updatedEta: EtaTraceSnapshot = {
+        remainingMinutes: estimate?.remainingMinutes ?? 0,
+        source: estimate?.source ?? "history",
+        targetLevel: 99,
+        historicalRunCount: estimate?.historicalRunCount ?? 0,
+        adaptedToLive: estimate?.adaptedToLive ?? false,
+        provisional: estimate?.provisional ?? true,
+        chargingObserved: estimate?.chargingObserved ?? false,
+        predictedCompletionAt:
+          current.time + (estimate?.remainingMinutes ?? 0) * 60_000,
+      };
+      appendChargingEtaTrace("crafty", {
+        kind: "eta_recalculation",
+        recordedAt: minute(100),
+        input: {
+          deviceId: "crafty",
+          currentLevel: 80,
+          sessionId: "current",
+          calculationTime: minute(100),
+          historySampleCount: history.length,
+          historyFingerprint: fingerprintBatterySamples(history),
+          latestSample: current,
+        },
+        previousEta: null,
+        updatedEta,
+        calculation: diagnostics,
+      });
+
+      const exported = createChargingDebugExport(
+        "crafty",
+        { version: "1.0.4", gitCommit: "abc123" },
+        minute(100)
+      );
+      expect(
+        exported.ruleAudit.unverifiedProvisionalRateCandidates
+      ).toBeGreaterThan(0);
+      expect(
+        exported.ruleAudit.selectedUnverifiedProvisionalRateIntervals
+      ).toBeGreaterThan(0);
+      expect(
+        exported.observations.provisionalRateCandidates.intervals.some(
+          (interval) =>
+            interval.selectedByLatestPrediction &&
+            interval.unverifiedReasons.includes(
+              "previous_observation_not_verified_change_notification"
+            )
+        )
+      ).toBe(true);
     } finally {
       vi.unstubAllGlobals();
     }

@@ -46,6 +46,20 @@ describe("charging-vs-usage classification", () => {
     });
   });
 
+  it("does not treat increasing snapshots from separate app openings as charging", () => {
+    const samples = [
+      point(30, 0, "opening-a", "snapshot"),
+      point(40, 10, "opening-b", "snapshot"),
+    ];
+    expect(
+      assessChargingActivity(samples, "opening-b", { now: minute(10) })
+    ).toMatchObject({
+      state: "unknown",
+      showEta: false,
+      chargingIntervals: [],
+    });
+  });
+
   it("shows a recent manual request provisionally without training", () => {
     const evidence = assessChargingActivity(
       [point(80, 100, "now", "snapshot")],

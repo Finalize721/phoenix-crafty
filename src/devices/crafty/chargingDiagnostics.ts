@@ -128,7 +128,11 @@ const asBatterySample = (value: unknown): BatterySample | undefined => {
   const sample = value as Record<string, unknown>;
   if (
     typeof sample.level !== "number" ||
+    !Number.isFinite(sample.level) ||
+    sample.level < 0 ||
+    sample.level > 100 ||
     typeof sample.time !== "number" ||
+    !Number.isFinite(sample.time) ||
     typeof sample.sessionId !== "string" ||
     (sample.origin !== undefined &&
       sample.origin !== "snapshot" &&
@@ -303,6 +307,10 @@ const buildCoverageTable = (
       predictionDurationUsedMinutes: used?.durationMinutes,
       predictionRateUsedMinutesPerPercent: used?.minutesPerPercent,
       predictionRateMethod: used?.method,
+      predictionRateReason:
+        used?.method === "interpolated"
+          ? "no_direct_rate_measurement_for_this_percent_nearest_measured_rate_used"
+          : undefined,
       predictionUse:
         used !== undefined
           ? "per_percent_rate"
@@ -440,38 +448,348 @@ export const createChargingDebugExport = (
     currentLevel,
     latestCalculation
   );
+  const observationKey = (sessionId: string, time: number, level: number) =>
+    JSON.stringify([sessionId, time, level]);
+  const sampleIndexesByKey = new Map<string, number[]>();
+  for (const { index, sample } of indexedSamples) {
+    const key = observationKey(sample.sessionId, sample.time, sample.level);
+    sampleIndexesByKey.set(key, [
+      ...(sampleIndexesByKey.get(key) ?? []),
+      index,
+    ]);
+  }
+  const matchingIndexes = (sessionId: string, time: number, level: number) =>
+    sampleIndexesByKey.get(observationKey(sessionId, time, level)) ?? [];
+  const inputSamplesByKey = new Map(
+    inputSamples.map((sample) => [
+      observationKey(sample.sessionId, sample.time, sample.level),
+      sample,
+    ])
+  );
+  const observationStatus = new Map<
+    number,
+    { accepted: boolean; rejectionReasons: Set<string> }
+  >();
+  const statusFor = (index: number) => {
+    let status = observationStatus.get(index);
+    if (!status) {
+      status = { accepted: false, rejectionReasons: new Set<string>() };
+      observationStatus.set(index, status);
+    }
+    return status;
+  };
+  for (const interval of intervalAudit.accepted) {
+    for (const index of [
+      ...matchingIndexes(interval.sessionId, interval.startTime, interval.from),
+      ...matchingIndexes(interval.sessionId, interval.endTime, interval.to),
+    ]) {
+      statusFor(index).accepted = true;
+    }
+  }
+  for (const interval of intervalAudit.rejected) {
+    for (const index of [
+      ...matchingIndexes(
+        interval.fromSessionId,
+        interval.startTime,
+        interval.from
+      ),
+      ...matchingIndexes(interval.toSessionId, interval.endTime, interval.to),
+    ]) {
+      for (const reason of interval.reasons) {
+        statusFor(index).rejectionReasons.add(reason);
+      }
+    }
+  }
+  for (const interval of acceptedIntervals) {
+    if (interval.estimatorEligible) continue;
+    for (const index of [
+      ...matchingIndexes(interval.sessionId, interval.startTime, interval.from),
+      ...matchingIndexes(interval.sessionId, interval.endTime, interval.to),
+    ]) {
+      for (const reason of interval.estimatorRejectionReasons) {
+        statusFor(index).rejectionReasons.add(reason);
+      }
+    }
+  }
 
-  const derivedObservations = indexedSamples.map(
-    ({ index, sample }, position) => {
-      const accepted = intervalAudit.accepted.find(
-        (interval) =>
-          interval.sessionId === sample.sessionId &&
-          interval.endTime === sample.time &&
-          interval.to === sample.level
-      );
-      const rejected = intervalAudit.rejected.find(
-        (interval) =>
-          interval.toSessionId === sample.sessionId &&
-          interval.endTime === sample.time &&
-          interval.to === sample.level
-      );
+  const provisionalSegments = rateSegments.provisional.map((segment) => {
+    const before = inputSamplesByKey.get(
+      observationKey(segment.sessionId, segment.startTime, segment.from)
+    );
+    const after = inputSamplesByKey.get(
+      observationKey(segment.sessionId, segment.endTime, segment.to)
+    );
+    const reasons = [
+      ...(before?.origin === "notification"
+        ? []
+        : ["previous_observation_not_verified_change_notification"]),
+      ...(after?.origin === "notification"
+        ? []
+        : ["current_observation_not_verified_change_notification"]),
+      ...(after?.continuousSincePrevious === true
+        ? []
+        : ["continuity_not_verified"]),
+      ...(before?.heaterActive === false && after?.heaterActive === false
+        ? []
+        : ["heater_off_not_verified"]),
+    ];
+    const selectedByLatestPrediction = latestPrediction
+      ? latestPrediction.calculation.selectedIntervals.some(
+          (interval) =>
+            interval.method === "provisional_segment" &&
+            interval.sessionId === segment.sessionId &&
+            interval.startTime === segment.startTime &&
+            interval.endTime === segment.endTime &&
+            interval.fromLevel === segment.from &&
+            interval.toLevel === segment.to
+        )
+      : false;
+    return {
+      ...segment,
+      fromOrigin: before?.origin,
+      toOrigin: after?.origin,
+      unverifiedReasons: reasons,
+      selectedByLatestPrediction,
+    };
+  });
+  const provisionalSampleRoles = new Map<
+    number,
+    { candidate: boolean; selected: boolean; reasons: Set<string> }
+  >();
+  for (const segment of provisionalSegments) {
+    for (const index of [
+      ...matchingIndexes(segment.sessionId, segment.startTime, segment.from),
+      ...matchingIndexes(segment.sessionId, segment.endTime, segment.to),
+    ]) {
+      let role = provisionalSampleRoles.get(index);
+      if (!role) {
+        role = { candidate: false, selected: false, reasons: new Set() };
+        provisionalSampleRoles.set(index, role);
+      }
+      role.candidate = true;
+      role.selected ||= segment.selectedByLatestPrediction;
+      for (const reason of segment.unverifiedReasons) role.reasons.add(reason);
+    }
+  }
+
+  const validObservationIndexes = new Set(
+    indexedSamples.map(({ index }) => index)
+  );
+  const derivedObservations = [
+    ...indexedSamples.map(({ index, sample }) => {
+      const status = observationStatus.get(index);
+      const rejected = Boolean(status?.rejectionReasons.size);
+      const accepted = status?.accepted ?? false;
+      const isolated =
+        (!accepted && !rejected) || (sample.origin === "snapshot" && !accepted);
+      const categories = [
+        ...(isolated ? ["isolated"] : []),
+        ...(accepted ? ["accepted"] : []),
+        ...(rejected ? ["rejected"] : []),
+      ];
+      const classificationReasons = [
+        ...(accepted
+          ? ["part_of_classifier_accepted_notification_interval"]
+          : []),
+        ...(status ? [...status.rejectionReasons] : []),
+        ...(isolated && sample.origin === "snapshot"
+          ? [
+              "snapshot_is_not_an_exact_percentage_transition",
+              "snapshot_may_only_constrain_crossing_bounds",
+            ]
+          : []),
+        ...(isolated && sample.origin !== "snapshot"
+          ? ["no_accepted_transition_uses_this_observation"]
+          : []),
+        ...((sample.origin === "legacy" || sample.origin === undefined) &&
+        !accepted
+          ? ["provenance_not_verified_as_a_change_notification"]
+          : []),
+      ];
+      const provisionalRole = provisionalSampleRoles.get(index);
+      const classification = isolated
+        ? sample.origin === "snapshot"
+          ? "isolated_snapshot"
+          : "isolated_observation"
+        : accepted && rejected
+          ? "accepted_and_rejected_observation"
+          : accepted
+            ? "accepted_charging_observation"
+            : "rejected_charging_observation";
       return {
         observationIndex: index,
         observation: sample,
-        classification: accepted
-          ? "accepted_charging_change"
-          : rejected
-            ? "rejected_charging_change"
-            : sample.level >= 99
-              ? "at_or_above_full_threshold"
-              : sample.origin === "snapshot"
-                ? "snapshot_not_used_as_rate"
-                : "not_part_of_accepted_charging_interval",
-        rejectionReasons: rejected?.reasons,
-        previousObservationIndex:
-          position > 0 ? indexedSamples[position - 1].index : undefined,
+        classification,
+        categories,
+        classificationReasons,
+        rejectionReasons: status ? [...status.rejectionReasons] : [],
+        provisionalRateCandidate: provisionalRole?.candidate ?? false,
+        selectedByLatestProvisionalPrediction:
+          provisionalRole?.selected ?? false,
+        provisionalReasons: provisionalRole ? [...provisionalRole.reasons] : [],
       };
+    }),
+    ...rawBatteryObservations.flatMap((observation, index) =>
+      validObservationIndexes.has(index)
+        ? []
+        : [
+            {
+              observationIndex: index,
+              observation,
+              classification: "rejected_invalid_observation",
+              categories: ["rejected"],
+              classificationReasons: [
+                "observation_does_not_match_supported_battery_sample_schema",
+              ],
+              rejectionReasons: [
+                "observation_does_not_match_supported_battery_sample_schema",
+              ],
+              provisionalRateCandidate: false,
+              selectedByLatestProvisionalPrediction: false,
+              provisionalReasons: [],
+            },
+          ]
+    ),
+  ].sort((a, b) => a.observationIndex - b.observationIndex);
+
+  const interpolatedRateIntervals = (latestCalculation?.rateUses ?? []).flatMap(
+    (rate) =>
+      rate.method === "interpolated"
+        ? [
+            {
+              fromPercent: rate.fromLevel,
+              toPercent: rate.toLevel,
+              minutesPerPercent: rate.minutesPerPercent,
+              durationMinutes: rate.durationMinutes,
+              method: rate.method,
+              classificationReasons: [
+                "no_direct_rate_measurement_for_this_percent",
+                "existing_estimator_used_the_nearest_measured_rate",
+              ],
+            },
+          ]
+        : []
+  );
+  const interpolatedCompletedRunCrossings = (
+    latestCalculation?.selectedIntervals ?? []
+  )
+    .filter((interval) => interval.method === "completed_run")
+    .flatMap((interval) =>
+      [
+        {
+          level: interval.fromLevel,
+          time: interval.startTime,
+          boundary: "start",
+        },
+        {
+          level: interval.toLevel,
+          time: interval.endTime,
+          boundary: "target",
+        },
+      ]
+        .filter(
+          (crossing) =>
+            !inputSamples.some(
+              (sample) =>
+                sample.sessionId === interval.sessionId &&
+                sample.level === crossing.level &&
+                sample.time === crossing.time
+            )
+        )
+        .map((crossing) => ({
+          sessionId: interval.sessionId,
+          ...crossing,
+          classificationReasons: [
+            "percentage_crossing_interpolated_between_verified_observations",
+          ],
+        }))
+    );
+  const interpolatedArrivals = rateSegments.verified.flatMap((segment) => {
+    let interpolatedPercentageCount = 0;
+    let firstInterpolatedLevel: number | undefined;
+    let lastInterpolatedLevel: number | undefined;
+    for (
+      let level = Math.floor(segment.from) + 1;
+      level < segment.to;
+      level++
+    ) {
+      if (level <= segment.from) continue;
+      interpolatedPercentageCount++;
+      firstInterpolatedLevel ??= level;
+      lastInterpolatedLevel = level;
     }
+    if (
+      !interpolatedPercentageCount ||
+      firstInterpolatedLevel === undefined ||
+      lastInterpolatedLevel === undefined
+    ) {
+      return [];
+    }
+    return [
+      {
+        sessionId: segment.sessionId,
+        fromLevel: segment.from,
+        toLevel: segment.to,
+        interpolatedPercentageCount,
+        firstInterpolatedLevel,
+        lastInterpolatedLevel,
+        firstInterpolatedAt:
+          segment.startTime +
+          ((firstInterpolatedLevel - segment.from) /
+            (segment.to - segment.from)) *
+            (segment.endTime - segment.startTime),
+        lastInterpolatedAt:
+          segment.startTime +
+          ((lastInterpolatedLevel - segment.from) /
+            (segment.to - segment.from)) *
+            (segment.endTime - segment.startTime),
+        classificationReasons: [
+          "interior_percentage_arrivals_interpolated_between_verified_notification_observations",
+        ],
+      },
+    ];
+  });
+  const isolatedCount = derivedObservations.filter((observation) =>
+    observation.categories.includes("isolated")
+  ).length;
+  const acceptedCount = derivedObservations.filter((observation) =>
+    observation.categories.includes("accepted")
+  ).length;
+  const rejectedCount = derivedObservations.filter((observation) =>
+    observation.categories.includes("rejected")
+  ).length;
+  const unverifiedProvisionalIntervals = provisionalSegments.filter(
+    (segment) => segment.unverifiedReasons.length > 0
+  );
+  const interpolatedCount =
+    interpolatedArrivals.reduce(
+      (count, arrival) => count + arrival.interpolatedPercentageCount,
+      0
+    ) +
+    interpolatedRateIntervals.length +
+    interpolatedCompletedRunCrossings.length;
+  const snapshotsInProvisionalSegments = provisionalSegments.filter(
+    (segment) =>
+      segment.fromOrigin === "snapshot" || segment.toOrigin === "snapshot"
+  );
+  const selectedUnverifiedProvisionalIntervals =
+    unverifiedProvisionalIntervals.filter(
+      (segment) => segment.selectedByLatestPrediction
+    );
+  const snapshotObservationKeys = new Set(
+    indexedSamples
+      .filter(({ sample }) => sample.origin === "snapshot")
+      .map(({ sample }) => JSON.stringify([sample.sessionId, sample.time]))
+  );
+  const snapshotTransitionRejections = intervalAudit.rejected.filter(
+    (interval) =>
+      interval.reasons.includes("session_changed") &&
+      (snapshotObservationKeys.has(
+        JSON.stringify([interval.fromSessionId, interval.startTime])
+      ) ||
+        snapshotObservationKeys.has(
+          JSON.stringify([interval.toSessionId, interval.endTime])
+        ))
   );
   const latestPredictionSummary = latestPrediction
     ? {
@@ -511,13 +829,62 @@ export const createChargingDebugExport = (
       historyFingerprint: fingerprintBatterySamples(inputSamples),
     },
     observations: {
+      classificationCounts: {
+        isolated: isolatedCount,
+        accepted: acceptedCount,
+        rejected: rejectedCount,
+        interpolated: interpolatedCount,
+        acceptedChargingIntervals: intervalAudit.accepted.length,
+        rejectedChargingIntervals: rejectedForCoverage.length,
+      },
+      classificationCountDefinitions: {
+        isolated:
+          "Raw observations not used as accepted transitions; snapshots remain isolated even when rejected as a cross-session candidate pair.",
+        accepted:
+          "Unique raw observations participating in an interval accepted by the charging activity classifier; may overlap rejected when the estimator later excludes that interval.",
+        rejected:
+          "Unique raw observations participating in rejected intervals, estimator-excluded intervals, or invalid stored records.",
+        interpolated:
+          "Derived percentage arrivals or rate intervals interpolated by the existing estimator; these are not raw Bluetooth observations.",
+      },
       derivedClassifications: derivedObservations,
       intervalAudit: {
         accepted: acceptedIntervals,
         rejected: intervalAudit.rejected,
       },
+      interpolatedObservations: {
+        verifiedIntervalArrivals: interpolatedArrivals,
+        predictionRateIntervals: interpolatedRateIntervals,
+        completedRunCrossings: interpolatedCompletedRunCrossings,
+      },
+      provisionalRateCandidates: {
+        intervals: provisionalSegments,
+        candidateCount: provisionalSegments.length,
+        unverifiedCount: unverifiedProvisionalIntervals.length,
+        selectedUnverifiedCount: selectedUnverifiedProvisionalIntervals.length,
+      },
       evidence: extractObservationEvidence(historyForAudit),
       observed99Arrivals: arrivalEvents,
+    },
+    ruleAudit: {
+      explicitSnapshotsInProvisionalRateSegments:
+        snapshotsInProvisionalSegments.length,
+      crossSessionSnapshotTransitionsRejected:
+        snapshotTransitionRejections.length,
+      unverifiedProvisionalRateCandidates:
+        unverifiedProvisionalIntervals.length,
+      selectedUnverifiedProvisionalRateIntervals:
+        selectedUnverifiedProvisionalIntervals.length,
+      findings: [
+        ...(snapshotsInProvisionalSegments.length > 0
+          ? ["explicit_snapshot_used_in_provisional_rate_segment"]
+          : []),
+        ...(selectedUnverifiedProvisionalIntervals.length > 0
+          ? [
+              "selected_provisional_estimate_uses_observations_without_verified_notification_continuity",
+            ]
+          : []),
+      ],
     },
     prediction: {
       latestRecalculation,
