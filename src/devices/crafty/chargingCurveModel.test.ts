@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type BatteryCurveSample,
+  type CurvePredictionDiagnostics,
   collectChargingRateSegments,
   predictChargingCurve,
   splitChargingRuns,
@@ -430,6 +431,64 @@ describe("Crafty+ historical ETA to 99%", () => {
     expect(estimate).toMatchObject({ source: "history", provisional: true });
     expect(estimate?.remainingMinutes).toBeGreaterThan(45);
     expect(estimate?.remainingMinutes).toBeLessThan(56);
+  });
+
+  it("does not let a sparsely verified tail extrapolate the fast 80% jump to 99%", () => {
+    const jumpRun = (id: string, start: number, lastLow: number) => [
+      ...Array.from({ length: lastLow - 34 }, (_, index) =>
+        point(35 + index, start + index * 0.9, id)
+      ),
+      point(80, start + (lastLow - 35) * 0.9 + 0.5, id),
+      point(81, start + (lastLow - 35) * 0.9 + 1.4, id),
+      point(82, start + (lastLow - 35) * 0.9 + 2.3, id),
+    ];
+    const olderTail = Array.from({ length: 20 }, (_, index) =>
+      point(80 + index, 200 + index * 0.9, "older-tail", {
+        heaterActive: undefined,
+      })
+    );
+    // A small verified fragment near 99% makes the verified model appear
+    // usable, even though it has NO readings from ~82 to ~94%.
+    const verifiedEnd = Array.from({ length: 6 }, (_, index) =>
+      point(94 + index, 250 + index * 0.9, "verified-end")
+    );
+    const history = [
+      ...jumpRun("jump-a", 0, 42),
+      ...jumpRun("jump-b", 100, 38),
+      ...olderTail,
+      ...verifiedEnd,
+    ];
+    const diagnostic = {
+      input: {
+        currentLevel: 36,
+        currentSessionId: "current",
+        calculationTime: minute(300),
+        historySampleCount: 0,
+        activeSessionSampleCount: 0,
+      },
+      fallbackReason: null,
+      baseline: undefined,
+      liveAdjustment: { factor: 1, applied: false },
+      selectedIntervals: [],
+      coverageCandidates: {},
+    } as CurvePredictionDiagnostics;
+    const at36 = predictChargingCurve(
+      [...history, point(36, 300, "current", { origin: "snapshot" })],
+      36, "current", minute(300), diagnostic
+    );
+    const at80 = predictChargingCurve(
+      [...history, point(80, 300, "current", { origin: "snapshot" })],
+      80, "current", minute(300)
+    );
+    expect(diagnostic.coverageCandidates.verified?.acceptedByEstimator).toBe(true);
+    expect(diagnostic.baseline?.method).toBe("provisional_segments");
+    expect(diagnostic.baseline?.coverage).toBe(1);
+    expect(at36).toMatchObject({ source: "history", provisional: true });
+    expect(at80).toMatchObject({ source: "history" });
+    expect(at36!.remainingMinutes).toBeGreaterThan(at80!.remainingMinutes);
+    expect(at36!.remainingMinutes).toBeGreaterThan(17);
+    expect(at36!.remainingMinutes).toBeLessThan(30);
+    expect(at80!.remainingMinutes).toBeGreaterThanOrEqual(17);
   });
 
   it("does not learn a one-off jump to 80% without independent corroboration", () => {
