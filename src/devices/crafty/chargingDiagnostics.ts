@@ -17,6 +17,8 @@ import { extractObservationEvidence } from "./observationQuality";
 
 const TRACE_STORAGE_KEY = "craftyChargingDebugTrace";
 const MAX_TRACE_ENTRIES = 200;
+const MAX_DETAILED_TRACE_ENTRIES = 5;
+const MAX_TRACE_STORAGE_CHARS = 600_000;
 
 export interface EtaTraceSnapshot extends CurvePrediction {
   predictedCompletionAt?: number;
@@ -89,10 +91,28 @@ export const appendChargingEtaTrace = (
     }
     entries = parsed as ChargingEtaTraceEntry[];
   }
-  storage.setItem(
-    key,
-    JSON.stringify([...entries, entry].slice(-MAX_TRACE_ENTRIES))
-  );
+  // A full interval audit can exceed 20 KB per reading; 200 such entries
+  // can exhaust localStorage and silently prevent battery history from saving.
+  // Preserve lightweight inputs/predictions for backtesting, but retain the
+  // detailed per-interval arrays only for the five newest calculations.
+  const retained = [...entries, entry].slice(-MAX_TRACE_ENTRIES);
+  for (let index = 0; index < retained.length - MAX_DETAILED_TRACE_ENTRIES; index++) {
+    const previous = retained[index];
+    retained[index] = {
+      ...previous,
+      calculation: {
+        ...previous.calculation,
+        selectedIntervals: [],
+        rateUses: undefined,
+      },
+    };
+  }
+  let serialized = JSON.stringify(retained);
+  while (serialized.length > MAX_TRACE_STORAGE_CHARS && retained.length > 1) {
+    retained.shift();
+    serialized = JSON.stringify(retained);
+  }
+  storage.setItem(key, serialized);
 };
 
 interface StoredJsonValue {
