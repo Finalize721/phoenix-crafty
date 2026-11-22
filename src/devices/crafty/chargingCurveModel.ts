@@ -589,7 +589,11 @@ export const predictChargingCurve = (
       }
     }
 
-    if (baseline === undefined) {
+    // A sparse "verified" curve is not automatically more trustworthy than
+    // a substantially better covered provisional curve. Otherwise its missing
+    // 80–93% tail can inherit the near-instant 40→80 gauge-jump rate and make
+    // a 36→99% prediction SHORTER than the observed 80→99% charging time.
+    if (baseline === undefined || coverage < 0.95) {
       const provisionalSegments = toProvisionalSegments(history);
       const provisionalAudit: SegmentEstimateAudit = {};
       const provisional = estimateFromSegments(
@@ -634,7 +638,11 @@ export const predictChargingCurve = (
           rejectionReasons,
         };
       }
-      if (accepted && provisional) {
+      if (
+        accepted &&
+        provisional &&
+        (baseline === undefined || provisional.coverage > coverage + 0.05)
+      ) {
         baseline = provisional.minutes;
         coverage = provisional.coverage;
         runCount = provisional.runCount;
