@@ -141,11 +141,27 @@ export const createCraftyStore = (
     reapply: () => driver.setAutoOffCountdown(300),
     report: (active, message) => setExtension({ active, message }),
   });
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  const refreshOnForeground = () => {
+    if (document.visibilityState !== "visible" || !state.loaded) return;
+    // Give pending notifications a brief opportunity to drain, then request
+    // current values from the device. A read is a snapshot, not proof of a
+    // historical percentage-change timestamp.
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      if (document.visibilityState !== "visible") return;
+      void driver.refreshLiveState().catch((error) =>
+        console.warn("Could not refresh Crafty live values:", error)
+      );
+    }, 500);
+  };
   const visibilityChanged = () => {
     if (document.visibilityState !== "visible" && extension().active)
       session.stop(
         "App im Hintergrund. Verlängerung gestoppt; Gerätetimer läuft weiter."
       );
+    if (document.visibilityState !== "visible") clearTimeout(refreshTimer);
+    else refreshOnForeground();
   };
   document.addEventListener("visibilitychange", visibilityChanged);
   createEffect(() => {
@@ -153,6 +169,7 @@ export const createCraftyStore = (
   });
   onCleanup(() => {
     session.stop();
+    clearTimeout(refreshTimer);
     document.removeEventListener("visibilitychange", visibilityChanged);
   });
   const actions = {
