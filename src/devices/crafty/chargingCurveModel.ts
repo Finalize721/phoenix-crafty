@@ -529,7 +529,12 @@ export const predictChargingCurve = (
     let selectedRateUses: NonNullable<CurvePredictionDiagnostics["rateUses"]> =
       [];
     if (baseline === undefined) {
-      const verifiedSegments = toSegments(history);
+      // Keep strict verified rates, but do not ignore independently corroborated
+      // gauge jumps merely because the verified rate coverage exceeds 70%.
+      const verifiedSegments = [
+        ...toSegments(history),
+        ...observedGaugeJumps(history),
+      ];
       const verifiedAudit: SegmentEstimateAudit = {};
       const partial = estimateFromSegments(
         verifiedSegments,
@@ -574,7 +579,11 @@ export const predictChargingCurve = (
         baseline = partial.minutes;
         coverage = partial.coverage;
         runCount = partial.runCount;
-        selectedMethod = "verified_segments";
+        selectedMethod = partial.selectedSegments.some(
+          (segment) => segment.kind === "gauge_jump"
+        )
+          ? "provisional_segments"
+          : "verified_segments";
         selectedSegmentSet = partial.selectedSegments;
         selectedRateUses = partial.rateUses;
       }
