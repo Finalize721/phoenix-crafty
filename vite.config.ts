@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import tailwindcss from "@tailwindcss/vite";
 import legacy from "@vitejs/plugin-legacy";
@@ -7,8 +9,18 @@ import solid from "vite-plugin-solid";
 
 // Bump when regenerating the icons; keep the query version in index.html and notify.ts aligned.
 const ICON_ASSET_VERSION = "2";
+const { version: APP_VERSION } = JSON.parse(
+  readFileSync(new URL("./package.json", import.meta.url), "utf8")
+) as { version: string };
+const GIT_COMMIT =
+  process.env.GITHUB_SHA ??
+  execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+    __GIT_COMMIT__: JSON.stringify(GIT_COMMIT),
+  },
   plugins: [
     // messages/{en,de}.json → src/paraglide (typed message functions). No
     // backend and no switcher: the browser language decides, English otherwise.

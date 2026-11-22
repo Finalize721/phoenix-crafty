@@ -3,6 +3,7 @@ import { DEFAULT_USER_HINT_MAX_AGE_MS } from "./chargingActivity";
 import {
   type BatteryCurveSample,
   type CurvePrediction,
+  type CurvePredictionDiagnostics,
   predictChargingCurve,
 } from "./chargingCurveModel";
 
@@ -17,8 +18,9 @@ const USER_HINT_STORAGE_KEY = "craftyChargingHint";
 const MAX_SAMPLES = 2_500;
 const MAX_ESTIMATE_AGE_MS = 30 * 60_000;
 
-const storageKey = (deviceId: string) =>
+export const chargingHistoryStorageKey = (deviceId: string) =>
   `${STORAGE_KEY}:${encodeURIComponent(deviceId)}`;
+const storageKey = chargingHistoryStorageKey;
 const userHintStorageKey = (deviceId: string) =>
   `${USER_HINT_STORAGE_KEY}:${encodeURIComponent(deviceId)}`;
 
@@ -105,6 +107,16 @@ const isBatterySample = (
   );
 };
 
+export const selectEstimatorBatteryHistory = (
+  stored: unknown,
+  now = Date.now()
+): BatterySample[] =>
+  Array.isArray(stored)
+    ? stored
+        .filter((sample) => isBatterySample(sample, now))
+        .slice(-MAX_SAMPLES)
+    : [];
+
 /** Read existing history from the same per-device key and legacy format. */
 export const readChargingHistory = (
   deviceId: string,
@@ -116,9 +128,7 @@ export const readChargingHistory = (
       localStorage.getItem(storageKey(deviceId)) || "[]"
     );
     if (!Array.isArray(stored)) return [];
-    const retained = stored
-      .filter((sample) => isBatterySample(sample, now))
-      .slice(-MAX_SAMPLES);
+    const retained = selectEstimatorBatteryHistory(stored, now);
     if (retained.length !== stored.length) storeHistory(deviceId, retained);
     return retained;
   } catch {
@@ -185,15 +195,54 @@ export const estimateChargingEta = (
   level: number,
   sessionId: string,
   now = Date.now()
-): ChargingEta | undefined => {
-  const prediction = predictChargingCurve(samples, level, sessionId, now);
-  if (!prediction) return undefined;
+): ChargingEta | undefined =>
+  diagnoseChargingEta(samples, level, sessionId, now).estimate;
+
+export interface ChargingEtaDiagnosis {
+  estimate?: ChargingEta;
+  diagnostics: CurvePredictionDiagnostics;
+}
+
+export const diagnoseChargingEta = (
+  samples: BatterySample[],
+  level: number,
+  sessionId: string,
+  now = Date.now()
+): ChargingEtaDiagnosis => {
+  const diagnostics: CurvePredictionDiagnostics = {
+    input: {
+      currentLevel: level,
+      currentSessionId: sessionId,
+      calculationTime: now,
+      historySampleCount: samples.length,
+      activeSessionSampleCount: 0,
+    },
+    fallbackReason: null,
+    baseline: undefined,
+    liveAdjustment: { factor: 1, applied: false },
+    selectedIntervals: [],
+    coverageCandidates: {},
+  };
+  const prediction = predictChargingCurve(
+    samples,
+    level,
+    sessionId,
+    now,
+    diagnostics
+  );
+  if (!prediction) return { diagnostics };
   const latest = [...samples]
     .reverse()
     .find((sample) => sample.sessionId === sessionId);
-  if (!latest) return undefined;
+  if (!latest) {
+    diagnostics.fallbackReason = "no_latest_sample_for_estimate_expiry";
+    return { diagnostics };
+  }
   return {
-    ...prediction,
-    expiresAt: latest.time + MAX_ESTIMATE_AGE_MS,
+    estimate: {
+      ...prediction,
+      expiresAt: latest.time + MAX_ESTIMATE_AGE_MS,
+    },
+    diagnostics,
   };
 };

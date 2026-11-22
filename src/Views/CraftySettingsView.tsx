@@ -1,24 +1,50 @@
+import Download from "lucide-solid/icons/download";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
-import { type Component, Show } from "solid-js";
+import { type Component, createSignal, Show } from "solid-js";
 import { AnalysisSection } from "../components/AnalysisSection";
 import { AppSettingsSection } from "../components/AppSettingsSection";
 import { PageTitle } from "../components/DeviceShell";
 import { FactoryReset } from "../components/FactoryReset";
 import {
   InfoRow,
+  SettingRow,
   SettingSlider,
   SettingSwitch,
   SettingsSection,
 } from "../components/Settings";
 import { Alert, AlertDescription } from "../components/ui/alert";
+import {
+  createChargingDebugExport,
+  downloadChargingDebugExport,
+} from "../devices/crafty/chargingDiagnostics";
 import { Limits } from "../devices/crafty/protocol";
 import { m } from "../paraglide/messages";
+import { useBluetooth } from "../provider/BluetoothProvider";
 import { useCrafty } from "../provider/CraftyProvider";
+import { APP_BUILD_INFO } from "../utils/buildInfo";
 import { formatDuration } from "../utils/heatProgress";
 
 export const CraftySettingsView: Component = () => {
   const { state, actions, derived, firmwareVersion, isOldFirmware } =
     useCrafty();
+  const { deviceInfo, knownDevice, rememberedDevice } = useBluetooth();
+  const [chargingExportStatus, setChargingExportStatus] =
+    createSignal<string>();
+  const chargingDeviceId = () =>
+    deviceInfo().serialNumber || knownDevice()?.id || rememberedDevice()?.id;
+  const exportChargingDiagnostics = () => {
+    const deviceId = chargingDeviceId();
+    if (!deviceId) return;
+    try {
+      downloadChargingDebugExport(
+        createChargingDebugExport(deviceId, APP_BUILD_INFO)
+      );
+      setChargingExportStatus(m.settings_chargingDebugExported());
+    } catch (error) {
+      console.error("Could not export charging debug data:", error);
+      setChargingExportStatus(m.settings_chargingDebugExportFailed());
+    }
+  };
 
   return (
     <>
@@ -84,6 +110,35 @@ export const CraftySettingsView: Component = () => {
       </SettingsSection>
 
       <AppSettingsSection />
+
+      <Show when={!isOldFirmware}>
+        <SettingsSection title={m.settings_sectionCharging()}>
+          <SettingRow
+            label={m.settings_chargingDebugExport()}
+            description={m.settings_chargingDebugExportHint()}
+          >
+            <button
+              type="button"
+              class="shrink-0 rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+              disabled={!chargingDeviceId()}
+              aria-label={m.settings_chargingDebugExport()}
+              onClick={exportChargingDiagnostics}
+            >
+              <Download class="size-4" />
+            </button>
+          </SettingRow>
+          <Show when={chargingExportStatus()}>
+            <p class="px-4 pb-3 text-xs text-muted-foreground" role="status">
+              {chargingExportStatus()}
+            </p>
+          </Show>
+          <Show when={!chargingDeviceId()}>
+            <p class="px-4 pb-3 text-xs text-muted-foreground">
+              {m.settings_chargingDebugNoDevice()}
+            </p>
+          </Show>
+        </SettingsSection>
+      </Show>
 
       <SettingsSection title={m.device_info()}>
         <InfoRow label={m.device_battery()}>{state.batteryLevel} %</InfoRow>

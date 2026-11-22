@@ -25,14 +25,92 @@ export interface CurvePrediction {
   chargingObserved: boolean;
 }
 
+export interface CurvePredictionDiagnostics {
+  input: {
+    currentLevel: number;
+    currentSessionId: string;
+    calculationTime: number;
+    historySampleCount: number;
+    activeSessionSampleCount: number;
+    latestSample?: BatteryCurveSample;
+  };
+  fallbackReason: string | null;
+  baseline:
+    | {
+        method: "completed_runs" | "verified_segments" | "provisional_segments";
+        minutes: number;
+        coverage: number;
+        runCount: number;
+      }
+    | undefined;
+  liveAdjustment: {
+    factor: number;
+    applied: boolean;
+    firstSample?: BatteryCurveSample;
+    elapsedMinutes?: number;
+    historicalMinutes?: number;
+    ratio?: number;
+    liveRateMinutesPerPercent?: number;
+    liveRemainingMinutes?: number;
+  };
+  selectedIntervals: Array<{
+    method:
+      | "completed_run"
+      | "verified_segment"
+      | "provisional_segment"
+      | "live_segment";
+    sessionId: string;
+    fromLevel: number;
+    toLevel: number;
+    startTime: number;
+    endTime: number;
+    elapsedMinutes: number;
+    minutesPerPercent?: number;
+    usedMinutes?: number;
+  }>;
+  rateUses?: Array<{
+    fromLevel: number;
+    toLevel: number;
+    minutesPerPercent: number;
+    durationMinutes: number;
+    method: "measured" | "interpolated";
+  }>;
+  coverageCandidates: {
+    verified?: {
+      coverage: number;
+      runCount: number;
+      observedNearTarget: boolean;
+      acceptedByEstimator: boolean;
+      rejectionReasons: string[];
+    };
+    provisional?: {
+      coverage: number;
+      runCount: number;
+      observedNearTarget: boolean;
+      acceptedByEstimator: boolean;
+      rejectionReasons: string[];
+    };
+  };
+}
+
 type Run = { sessionId: string; points: BatteryCurveSample[] };
-type Segment = {
+export interface ChargingRateSegment {
   from: number;
   to: number;
   elapsedMinutes: number;
   minutesPerPercent: number;
   sessionId: string;
-};
+  startTime: number;
+  endTime: number;
+}
+type Segment = ChargingRateSegment;
+
+interface SegmentEstimateAudit {
+  coverage?: number;
+  runCount?: number;
+  rateUses?: NonNullable<CurvePredictionDiagnostics["rateUses"]>;
+  selectedSegments?: Segment[];
+}
 
 const MINUTE = 60_000;
 const MAX_GAP = 12 * MINUTE;
@@ -116,6 +194,8 @@ const toSegments = (runs: Run[]): Segment[] => {
         elapsedMinutes: elapsed,
         minutesPerPercent,
         sessionId: interval.sessionId,
+        startTime: interval.startTime,
+        endTime: interval.endTime,
       });
     }
   }
@@ -149,18 +229,46 @@ const toProvisionalSegments = (runs: Run[]): Segment[] => {
         elapsedMinutes: elapsed,
         minutesPerPercent,
         sessionId: run.sessionId,
+        startTime: before.time,
+        endTime: after.time,
       });
     }
   }
   return segments;
 };
+
+export const collectChargingRateSegments = (
+  samples: BatteryCurveSample[],
+  excludedSessionId: string
+): { verified: ChargingRateSegment[]; provisional: ChargingRateSegment[] } => {
+  const history = splitChargingRuns(samples).filter(
+    (run) => run.sessionId !== excludedSessionId
+  );
+  return {
+    verified: toSegments(history),
+    provisional: toProvisionalSegments(history),
+  };
+};
+
 const estimateFromSegments = (
   segments: Segment[],
-  start: number
-): { minutes: number; coverage: number; runCount: number } | undefined => {
+  start: number,
+  audit?: SegmentEstimateAudit
+):
+  | {
+      minutes: number;
+      coverage: number;
+      runCount: number;
+      rateUses: NonNullable<CurvePredictionDiagnostics["rateUses"]>;
+      selectedSegments: Segment[];
+    }
+  | undefined => {
   const intervals: {
     position: number;
+    low: number;
+    high: number;
     minutesPerPercent?: number;
+    matching: Segment[];
   }[] = [];
   let total = 0;
   let directlyCovered = 0;
@@ -184,12 +292,19 @@ const estimateFromSegments = (
     }
     intervals.push({
       position: (low + high) / 2,
+      low,
+      high,
       minutesPerPercent: typical,
+      matching,
     });
     total += high - low;
   }
 
   const coverage = total ? directlyCovered / total : 0;
+  if (audit) {
+    audit.coverage = coverage;
+    audit.runCount = contributingSessions.size;
+  }
   if (!total || coverage < 0.2 || contributingSessions.size === 0)
     return undefined;
 
@@ -203,8 +318,12 @@ const estimateFromSegments = (
   if (overall === undefined) return undefined;
 
   let minutes = 0;
+  const rateUses: NonNullable<CurvePredictionDiagnostics["rateUses"]> = [];
+  const selectedSegments = new Map<string, Segment>();
   for (const interval of intervals) {
     let rate = interval.minutesPerPercent;
+    let method: "measured" | "interpolated" = "measured";
+    let selected = interval.matching;
     if (rate === undefined) {
       const nearest = measured.reduce((best, candidate) =>
         Math.abs(candidate.position - interval.position) <
@@ -213,30 +332,79 @@ const estimateFromSegments = (
           : best
       );
       rate = clamp(nearest.minutesPerPercent, overall * 0.5, overall * 2);
+      method = "interpolated";
+      selected = segments.filter(
+        (segment) =>
+          segment.from <= nearest.position && segment.to > nearest.position
+      );
     }
     const low = Math.max(start, Math.floor(interval.position));
     const high = Math.min(99, Math.floor(interval.position) + 1);
     minutes += (high - low) * rate;
+    rateUses.push({
+      fromLevel: low,
+      toLevel: high,
+      minutesPerPercent: rate,
+      durationMinutes: (high - low) * rate,
+      method,
+    });
+    for (const segment of selected) {
+      selectedSegments.set(
+        `${segment.sessionId}:${segment.startTime}:${segment.endTime}`,
+        segment
+      );
+    }
   }
-  return {
+  const result = {
     minutes,
     coverage,
     runCount: contributingSessions.size,
+    rateUses,
+    selectedSegments: [...selectedSegments.values()],
   };
+  if (audit) {
+    audit.rateUses = result.rateUses;
+    audit.selectedSegments = result.selectedSegments;
+  }
+  return result;
 };
 
 export const predictChargingCurve = (
   samples: BatteryCurveSample[],
   currentLevel: number,
   currentSessionId: string,
-  now = Date.now()
+  now = Date.now(),
+  diagnostics?: CurvePredictionDiagnostics
 ): CurvePrediction | undefined => {
   const targetLevel = 99;
+  const setFallback = (reason: string) => {
+    if (diagnostics) diagnostics.fallbackReason = reason;
+  };
+  if (diagnostics) {
+    diagnostics.input = {
+      currentLevel,
+      currentSessionId,
+      calculationTime: now,
+      historySampleCount: samples.length,
+      activeSessionSampleCount: 0,
+    };
+    diagnostics.fallbackReason = null;
+    diagnostics.baseline = undefined;
+    diagnostics.liveAdjustment = { factor: 1, applied: false };
+    diagnostics.selectedIntervals = [];
+    diagnostics.rateUses = undefined;
+    diagnostics.coverageCandidates = {};
+  }
   if (
     !Number.isFinite(currentLevel) ||
     currentLevel < 0 ||
     currentLevel >= targetLevel
   ) {
+    setFallback(
+      currentLevel >= targetLevel
+        ? "target_already_reached"
+        : "invalid_current_level"
+    );
     return undefined;
   }
 
@@ -245,13 +413,24 @@ export const predictChargingCurve = (
   const active = activeRuns[activeRuns.length - 1];
   const points = active?.points;
   const last = points?.[points.length - 1];
-  if (
-    !points ||
-    !last ||
-    last.level !== currentLevel ||
-    now < last.time ||
-    now - last.time > MAX_FRESHNESS
-  ) {
+  if (diagnostics) {
+    diagnostics.input.activeSessionSampleCount = points?.length ?? 0;
+    diagnostics.input.latestSample = last;
+  }
+  if (!points || !last) {
+    setFallback("no_current_session_samples");
+    return undefined;
+  }
+  if (last.level !== currentLevel) {
+    setFallback("latest_sample_level_mismatch");
+    return undefined;
+  }
+  if (now < last.time) {
+    setFallback("latest_sample_is_in_the_future");
+    return undefined;
+  }
+  if (now - last.time > MAX_FRESHNESS) {
+    setFallback("latest_sample_is_stale");
     return undefined;
   }
   const activeIntervals = findChargingIntervals(points);
@@ -266,36 +445,102 @@ export const predictChargingCurve = (
       const from = atLevel(run, currentLevel);
       const to = atLevel(run, targetLevel);
       return from !== undefined && to !== undefined && to > from
-        ? [{ minutes: (to - from) / MINUTE }]
+        ? [
+            {
+              minutes: (to - from) / MINUTE,
+              sessionId: run.sessionId,
+              from,
+              to,
+            },
+          ]
         : [];
     });
     let baseline = median(exact.map((run) => run.minutes));
     let coverage = exact.length ? 1 : 0;
     let runCount = exact.length;
     const verifiedFullRun = exact.length > 0;
+    let selectedMethod:
+      | "completed_runs"
+      | "verified_segments"
+      | "provisional_segments"
+      | undefined;
+    let selectedSegmentSet: Segment[] = [];
+    let selectedRateUses: NonNullable<CurvePredictionDiagnostics["rateUses"]> =
+      [];
+    if (baseline !== undefined) {
+      selectedMethod = "completed_runs";
+      if (diagnostics) {
+        diagnostics.selectedIntervals = exact.map((run) => ({
+          method: "completed_run",
+          sessionId: run.sessionId,
+          fromLevel: currentLevel,
+          toLevel: targetLevel,
+          startTime: run.from,
+          endTime: run.to,
+          elapsedMinutes: run.minutes,
+        }));
+      }
+    }
 
     if (baseline === undefined) {
       const verifiedSegments = toSegments(history);
-      const partial = estimateFromSegments(verifiedSegments, currentLevel);
+      const verifiedAudit: SegmentEstimateAudit = {};
+      const partial = estimateFromSegments(
+        verifiedSegments,
+        currentLevel,
+        diagnostics ? verifiedAudit : undefined
+      );
       const nearTargetWasObserved = verifiedSegments.some(
         (segment) => segment.to >= targetLevel - 2
       );
-      if (
+      const accepted =
         partial &&
         (complete.length > 0 ||
-          (partial.coverage >= 0.7 && nearTargetWasObserved))
-      ) {
+          (partial.coverage >= 0.7 && nearTargetWasObserved));
+      const rejectionReasons = [
+        ...(!partial
+          ? [
+              verifiedAudit.coverage === undefined ||
+              verifiedAudit.coverage === 0
+                ? "no_verified_segment_coverage"
+                : verifiedAudit.coverage < 0.2
+                  ? "verified_coverage_below_20_percent"
+                  : "no_contributing_verified_sessions",
+            ]
+          : []),
+        ...(partial && complete.length === 0 && partial.coverage < 0.7
+          ? ["verified_coverage_below_70_percent"]
+          : []),
+        ...(partial && complete.length === 0 && !nearTargetWasObserved
+          ? ["no_verified_observation_at_or_above_97_percent"]
+          : []),
+      ];
+      if (diagnostics) {
+        diagnostics.coverageCandidates.verified = {
+          coverage: verifiedAudit.coverage ?? partial?.coverage ?? 0,
+          runCount: verifiedAudit.runCount ?? partial?.runCount ?? 0,
+          observedNearTarget: nearTargetWasObserved,
+          acceptedByEstimator: Boolean(accepted),
+          rejectionReasons,
+        };
+      }
+      if (accepted && partial) {
         baseline = partial.minutes;
         coverage = partial.coverage;
         runCount = partial.runCount;
+        selectedMethod = "verified_segments";
+        selectedSegmentSet = partial.selectedSegments;
+        selectedRateUses = partial.rateUses;
       }
     }
 
     if (baseline === undefined) {
       const provisionalSegments = toProvisionalSegments(history);
+      const provisionalAudit: SegmentEstimateAudit = {};
       const provisional = estimateFromSegments(
         provisionalSegments,
-        currentLevel
+        currentLevel,
+        diagnostics ? provisionalAudit : undefined
       );
       const nearTargetWasObserved = history.some((run) =>
         run.points.some(
@@ -305,16 +550,52 @@ export const predictChargingCurve = (
             point.level >= targetLevel - 2
         )
       );
-      if (provisional && provisional.coverage >= 0.7 && nearTargetWasObserved) {
+      const accepted =
+        provisional && provisional.coverage >= 0.7 && nearTargetWasObserved;
+      const rejectionReasons = [
+        ...(!provisional
+          ? [
+              provisionalAudit.coverage === undefined ||
+              provisionalAudit.coverage === 0
+                ? "no_provisional_segment_coverage"
+                : provisionalAudit.coverage < 0.2
+                  ? "provisional_coverage_below_20_percent"
+                  : "no_contributing_provisional_sessions",
+            ]
+          : []),
+        ...(provisional && provisional.coverage < 0.7
+          ? ["provisional_coverage_below_70_percent"]
+          : []),
+        ...(provisional && !nearTargetWasObserved
+          ? ["no_provisional_observation_at_or_above_97_percent"]
+          : []),
+      ];
+      if (diagnostics) {
+        diagnostics.coverageCandidates.provisional = {
+          coverage: provisionalAudit.coverage ?? provisional?.coverage ?? 0,
+          runCount: provisionalAudit.runCount ?? provisional?.runCount ?? 0,
+          observedNearTarget: nearTargetWasObserved,
+          acceptedByEstimator: Boolean(accepted),
+          rejectionReasons,
+        };
+      }
+      if (accepted && provisional) {
         baseline = provisional.minutes;
         coverage = provisional.coverage;
         runCount = provisional.runCount;
+        selectedMethod = "provisional_segments";
+        selectedSegmentSet = provisional.selectedSegments;
+        selectedRateUses = provisional.rateUses;
       }
     }
 
     if (baseline !== undefined && Number.isFinite(baseline) && baseline > 0) {
       let adjustment = 1;
       let adaptedToLive = false;
+      let adjustmentDetails: CurvePredictionDiagnostics["liveAdjustment"] = {
+        factor: 1,
+        applied: false,
+      };
       const first = points.find(
         (point) =>
           point.level >= currentLevel - 20 && point.level <= currentLevel - 8
@@ -333,6 +614,41 @@ export const predictChargingCurve = (
           const ratio = (last.time - first.time) / MINUTE / typical;
           adjustment = clamp(1 + 0.35 * (ratio - 1), 0.85, 1.15);
           adaptedToLive = true;
+          adjustmentDetails = {
+            factor: adjustment,
+            applied: true,
+            firstSample: first,
+            elapsedMinutes: (last.time - first.time) / MINUTE,
+            historicalMinutes: typical,
+            ratio,
+          };
+        }
+      }
+      if (diagnostics) {
+        diagnostics.fallbackReason = null;
+        diagnostics.baseline = {
+          method: selectedMethod ?? "completed_runs",
+          minutes: baseline,
+          coverage,
+          runCount,
+        };
+        diagnostics.liveAdjustment = adjustmentDetails;
+        diagnostics.rateUses =
+          selectedRateUses.length > 0 ? selectedRateUses : undefined;
+        if (selectedMethod !== "completed_runs") {
+          diagnostics.selectedIntervals = selectedSegmentSet.map((segment) => ({
+            method:
+              selectedMethod === "verified_segments"
+                ? "verified_segment"
+                : "provisional_segment",
+            sessionId: segment.sessionId,
+            fromLevel: segment.from,
+            toLevel: segment.to,
+            startTime: segment.startTime,
+            endTime: segment.endTime,
+            elapsedMinutes: segment.elapsedMinutes,
+            minutesPerPercent: segment.minutesPerPercent,
+          }));
         }
       }
       return {
@@ -347,18 +663,63 @@ export const predictChargingCurve = (
     }
   }
 
-  if (!chargingObserved) return undefined;
+  if (!chargingObserved) {
+    setFallback(
+      history.length
+        ? "no_historical_baseline_or_recent_verified_charging"
+        : "no_historical_samples_or_recent_verified_charging"
+    );
+    return undefined;
+  }
   const latestMeasured = toSegments([active]).find(
     (segment) => segment.to === currentLevel
   );
-  if (!latestMeasured || latestMeasured.elapsedMinutes < 2) return undefined;
+  if (!latestMeasured) {
+    setFallback("no_eligible_live_charging_interval");
+    return undefined;
+  }
+  if (latestMeasured.elapsedMinutes < 2) {
+    setFallback("live_charging_interval_shorter_than_two_minutes");
+    return undefined;
+  }
   const rate = latestMeasured.minutesPerPercent;
-  if (!Number.isFinite(rate) || rate <= 0) return undefined;
+  if (!Number.isFinite(rate) || rate <= 0) {
+    setFallback("invalid_live_charging_rate");
+    return undefined;
+  }
+  const remainingMinutes = Math.max(
+    1,
+    Math.ceil((targetLevel - currentLevel) * rate)
+  );
+  if (diagnostics) {
+    diagnostics.fallbackReason = null;
+    diagnostics.liveAdjustment.liveRateMinutesPerPercent = rate;
+    diagnostics.liveAdjustment.liveRemainingMinutes = remainingMinutes;
+    diagnostics.selectedIntervals = [
+      {
+        method: "live_segment",
+        sessionId: latestMeasured.sessionId,
+        fromLevel: latestMeasured.from,
+        toLevel: latestMeasured.to,
+        startTime: latestMeasured.startTime,
+        endTime: latestMeasured.endTime,
+        elapsedMinutes: latestMeasured.elapsedMinutes,
+        minutesPerPercent: rate,
+      },
+    ];
+    diagnostics.rateUses = Array.from(
+      { length: targetLevel - currentLevel },
+      (_, index) => ({
+        fromLevel: currentLevel + index,
+        toLevel: currentLevel + index + 1,
+        minutesPerPercent: rate,
+        durationMinutes: rate,
+        method: "measured" as const,
+      })
+    );
+  }
   return {
-    remainingMinutes: Math.max(
-      1,
-      Math.ceil((targetLevel - currentLevel) * rate)
-    ),
+    remainingMinutes,
     source: "live",
     targetLevel,
     historicalRunCount: 0,

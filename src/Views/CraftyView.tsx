@@ -23,9 +23,17 @@ import {
   type ChargingEvidence,
 } from "../devices/crafty/chargingActivity";
 import {
+  appendChargingEtaTrace,
+  classifyObserved99Arrival,
+  type EtaTraceSnapshot,
+  fingerprintBatterySamples,
+  type Observed99Event,
+} from "../devices/crafty/chargingDiagnostics";
+import {
   type BatterySample,
   clearUserChargingHintAt,
-  estimateChargingEta,
+  diagnoseChargingEta,
+  type estimateChargingEta,
   readChargingHistory,
   readUserChargingHintAt,
   recordBatterySample,
@@ -191,6 +199,23 @@ const CraftyChargingEta = () => {
     setContinuityVersion((version) => version + 1);
   };
   let wasHeaterActive = derived.isHeaterActive();
+  const toTraceSnapshot = (
+    value:
+      | (ReturnType<typeof estimateChargingEta> & { fullAt?: number })
+      | undefined
+  ): EtaTraceSnapshot | null =>
+    value
+      ? {
+          remainingMinutes: value.remainingMinutes,
+          source: value.source,
+          targetLevel: value.targetLevel,
+          historicalRunCount: value.historicalRunCount,
+          adaptedToLive: value.adaptedToLive,
+          provisional: value.provisional,
+          chargingObserved: value.chargingObserved,
+          predictedCompletionAt: value.fullAt,
+        }
+      : null;
   createEffect(() => {
     const heaterActive = derived.isHeaterActive();
     if (heaterActive === wasHeaterActive) return;
@@ -205,9 +230,16 @@ const CraftyChargingEta = () => {
     history: BatterySample[],
     level: number,
     activeSessionId: string,
-    time: number
+    time: number,
+    observed99?: Observed99Event
   ) => {
-    const estimate = estimateChargingEta(history, level, activeSessionId, time);
+    const previousEta = toTraceSnapshot(eta());
+    const { estimate, diagnostics } = diagnoseChargingEta(
+      history,
+      level,
+      activeSessionId,
+      time
+    );
     const latest = [...history]
       .reverse()
       .find((sample) => sample.sessionId === activeSessionId);
@@ -215,7 +247,31 @@ const CraftyChargingEta = () => {
       estimate?.remainingMinutes === undefined || !latest
         ? undefined
         : latest.time + estimate.remainingMinutes * 60_000;
-    setEta(estimate ? { ...estimate, fullAt } : undefined);
+    const updatedEta = estimate ? { ...estimate, fullAt } : undefined;
+    setEta(updatedEta);
+    if (historyId) {
+      try {
+        appendChargingEtaTrace(historyId, {
+          kind: "eta_recalculation",
+          recordedAt: Date.now(),
+          input: {
+            deviceId: historyId,
+            currentLevel: level,
+            sessionId: activeSessionId,
+            calculationTime: time,
+            historySampleCount: history.length,
+            historyFingerprint: fingerprintBatterySamples(history),
+            ...(latest ? { latestSample: latest } : {}),
+          },
+          previousEta,
+          updatedEta: toTraceSnapshot(updatedEta),
+          calculation: diagnostics,
+          ...(observed99 ? { observed99 } : {}),
+        });
+      } catch (error) {
+        console.error("Could not save charging ETA diagnostics:", error);
+      }
+    }
     return estimate;
   };
   const handleVisibilityChange = () => {
@@ -374,7 +430,17 @@ const CraftyChargingEta = () => {
     }
     lastProcessedReadingId = readingId;
 
-    const estimate = calculateEta(samples, level, activeSessionId, now);
+    const observed99 =
+      recorded && latestSample
+        ? classifyObserved99Arrival(latestSample, previousSample)
+        : undefined;
+    const estimate = calculateEta(
+      samples,
+      level,
+      activeSessionId,
+      now,
+      observed99
+    );
     if (estimate) {
       const history = samples;
       const expiryTimer = setTimeout(
