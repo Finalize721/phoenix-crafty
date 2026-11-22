@@ -304,7 +304,7 @@ const CraftyChargingEta = () => {
   createEffect(() => {
     sampleVersion();
     continuityVersion();
-    const currentNow = now();
+    const currentNow = Math.max(now(), Date.now());
     const activeSessionId = sessionId;
     const id = historyId;
     const heaterActive = derived.isHeaterActive();
@@ -421,7 +421,6 @@ const CraftyChargingEta = () => {
       latestSample.level === level &&
       latestSample.sessionId === activeSessionId;
     samples = nextSamples;
-    setSampleVersion((version) => version + 1);
     if (recorded) {
       breakBeforeNextSample = !connected || !visible;
       continuityValid = connected && visible;
@@ -429,6 +428,8 @@ const CraftyChargingEta = () => {
       continuityValid = false;
     }
     lastProcessedReadingId = readingId;
+    updateClock();
+    setSampleVersion((version) => version + 1);
 
     const observed99 =
       recorded && latestSample
@@ -468,8 +469,13 @@ const CraftyChargingEta = () => {
       minute: "2-digit",
     }).format(fullAt);
   const canShowEta = () =>
-    Boolean(eta()) && activity().showEta && !derived.isHeaterActive();
-  const visibleEta = () => (canShowEta() ? eta() : undefined);
+    activity().showEta && !derived.isHeaterActive();
+  const visibleEta = () => {
+    const estimate = eta();
+    return estimate?.fullAt !== undefined && estimate.fullAt > now()
+      ? estimate
+      : undefined;
+  };
   const canOfferManualEta = () =>
     Boolean(eta()) &&
     activity().canComputeHistoricalEta &&
@@ -493,8 +499,8 @@ const CraftyChargingEta = () => {
       when={state.loaded && isCraftyPlus && state.batteryLevel >= 99}
       fallback={
         <>
-          <Show when={visibleEta()}>
-            {(estimate) => (
+          <Show when={canShowEta()}>
+            {() => (
               <section
                 class="rounded-2xl border bg-card px-4 py-3 text-sm"
                 role="status"
@@ -505,13 +511,13 @@ const CraftyChargingEta = () => {
                     ? m.device_historicalEtaUnconfirmed()
                     : m.device_isLikelyCharging()}
                 </p>
-                <Show when={estimate().provisional || activity().manualOnly}>
+                <Show when={visibleEta()?.provisional || activity().manualOnly}>
                   <p class="text-xs text-muted-foreground">
                     {m.device_etaProvisional()}
                   </p>
                 </Show>
                 <Show
-                  when={estimate().fullAt}
+                  when={visibleEta()?.fullAt}
                   fallback={
                     <p class="text-muted-foreground">
                       {m.device_etaCalculating()}
