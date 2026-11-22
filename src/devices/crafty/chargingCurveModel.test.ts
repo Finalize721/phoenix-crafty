@@ -373,4 +373,35 @@ describe("Crafty+ historical ETA to 99%", () => {
       )
     ).toBeUndefined();
   });
+
+  it("combines overlapping partial charging runs instead of privileging one completed curve", () => {
+    const history = [
+      point(0, 0, "a"), point(10, 10, "a"), point(20, 20, "a"),
+      point(10, 30, "b"), point(20, 40, "b"), point(30, 50, "b"),
+      point(30, 60, "c"), point(60, 90, "c"), point(99, 129, "c"),
+      point(6, 150, "current", { origin: "snapshot" }),
+    ];
+    expect(predictChargingCurve(history, 6, "current", minute(150)))
+      .toMatchObject({ source: "history", remainingMinutes: 93 });
+  });
+
+  it("does not lose the live estimate when the next individual interval takes under two minutes", () => {
+    const rows = [
+      point(4, 100, "current"), point(5, 102, "current"),
+      point(6, 104, "current"), point(7, 105, "current"),
+    ];
+    expect(predictChargingCurve(rows.slice(0, 3), 6, "current", minute(104)))
+      .toMatchObject({ source: "live", remainingMinutes: 186 });
+    expect(predictChargingCurve(rows, 7, "current", minute(105)))
+      .toMatchObject({ source: "live", remainingMinutes: 154 });
+  });
+
+  it("does not extrapolate a short burst of percentage jumps into a full charge estimate", () => {
+    const rows = [
+      point(4, 100, "current"), point(5, 100.1, "current"),
+      point(6, 100.2, "current"),
+    ];
+    expect(predictChargingCurve(rows, 6, "current", minute(100.2)))
+      .toBeUndefined();
+  });
 });
