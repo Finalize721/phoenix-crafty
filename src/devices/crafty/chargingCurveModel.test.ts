@@ -396,6 +396,71 @@ describe("Crafty+ historical ETA to 99%", () => {
       .toMatchObject({ source: "live", remainingMinutes: 154 });
   });
 
+  it("learns the repeatedly observed jump to 80% without inventing 40 minutes", () => {
+    const charge = (id: string, start: number, lastLow: number) => {
+      const low = Array.from({ length: lastLow - 5 }, (_, index) =>
+        point(6 + index, start + 0.9 * index, id)
+      );
+      const jumpAt = start + 0.9 * (lastLow - 6);
+      return [
+        ...low,
+        point(80, jumpAt + 0.5, id),
+        ...Array.from({ length: 19 }, (_, index) =>
+          point(81 + index, jumpAt + 1.4 + 0.9 * index, id)
+        ),
+      ];
+    };
+    const slowerMiddle = (id: string, start: number) =>
+      Array.from({ length: 26 }, (_, index) =>
+        point(40 + index, start + index * 0.9, id)
+      );
+    const history = [
+      ...charge("observed-a", 0, 42),
+      ...charge("observed-b", 100, 38),
+      ...slowerMiddle("slow-a", 200),
+      ...slowerMiddle("slow-b", 240),
+    ];
+    const sample = point(6, 300, "current", { origin: "snapshot" });
+    const estimate = predictChargingCurve(
+      [...history, sample],
+      6,
+      "current",
+      minute(300)
+    );
+    expect(estimate).toMatchObject({ source: "history", provisional: true });
+    expect(estimate?.remainingMinutes).toBeGreaterThan(45);
+    expect(estimate?.remainingMinutes).toBeLessThan(56);
+  });
+
+  it("does not learn a one-off jump to 80% without independent corroboration", () => {
+    const low = Array.from({ length: 37 }, (_, index) =>
+      point(6 + index, index * 0.9, "one")
+    );
+    const high = Array.from({ length: 20 }, (_, index) =>
+      point(80 + index, 33 + index * 0.9, "one")
+    );
+    expect(
+      predictChargingCurve(
+        [...low, ...high, point(6, 200, "current", { origin: "snapshot" })],
+        6,
+        "current",
+        minute(200)
+      )
+    ).toBeUndefined();
+  });
+
+  it("does not train from replayed notification bursts around a gauge jump", () => {
+    const burst = [
+      point(39, 0, "burst"),
+      point(40, 0.001, "burst"),
+      point(80, 0.002, "burst"),
+      point(81, 0.003, "burst"),
+      point(82, 0.004, "burst"),
+    ];
+    expect(collectChargingRateSegments(burst, "current").provisional)
+      .toEqual([]);
+  });
+
   it("does not extrapolate a short burst of percentage jumps into a full charge estimate", () => {
     const rows = [
       point(4, 100, "current"), point(5, 100.1, "current"),

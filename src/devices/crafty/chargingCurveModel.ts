@@ -102,6 +102,7 @@ export interface ChargingRateSegment {
   sessionId: string;
   startTime: number;
   endTime: number;
+  kind?: "gauge_jump";
 }
 type Segment = ChargingRateSegment;
 
@@ -202,6 +203,69 @@ const toSegments = (runs: Run[]): Segment[] => {
   return segments;
 };
 
+/**
+ * Crafty+ can report a large, repeatable jump to 80% while surrounding
+ * percentage changes arrive at a normal charging cadence. This is NOT a set
+ * of 1%-arrival timestamps: it only bounds one observed aggregate jump.
+ *
+ * Reject batched/replayed notifications (millisecond cadence) and app gaps.
+ * Require corroboration from independent sessions before using the jump
+ * to avoid extrapolating ~40 fictitious minutes across the missing band.
+ */
+const observedGaugeJumps = (runs: Run[]): Segment[] => {
+  const candidates: Segment[] = [];
+  for (const run of runs) {
+    const points = run.points;
+    for (let index = 2; index < points.length - 1; index++) {
+      const previous = points[index - 2];
+      const before = points[index - 1];
+      const after = points[index];
+      const following = points[index + 1];
+      const elapsed = (after.time - before.time) / MINUTE;
+      const beforeMs = before.time - previous.time;
+      const afterMs = following.time - after.time;
+      if (
+        before.level < 30 ||
+        before.level > 75 ||
+        after.level !== 80 ||
+        after.level - before.level < 10 ||
+        elapsed < 10 / 60 ||
+        elapsed > 2 ||
+        previous.level !== before.level - 1 ||
+        following.level !== after.level + 1 ||
+        beforeMs < 20_000 ||
+        beforeMs > 120_000 ||
+        afterMs < 20_000 ||
+        afterMs > 120_000 ||
+        [previous, before, after, following].some(
+          (sample) =>
+            sample.origin === "snapshot" || sample.heaterActive === true
+        ) ||
+        before.continuousSincePrevious !== true ||
+        after.continuousSincePrevious !== true ||
+        following.continuousSincePrevious !== true ||
+        after.breakBefore === true ||
+        following.breakBefore === true
+      ) {
+        continue;
+      }
+      candidates.push({
+        from: before.level,
+        to: after.level,
+        elapsedMinutes: elapsed,
+        minutesPerPercent: elapsed / (after.level - before.level),
+        sessionId: run.sessionId,
+        startTime: before.time,
+        endTime: after.time,
+        kind: "gauge_jump",
+      });
+    }
+  }
+  return new Set(candidates.map((segment) => segment.sessionId)).size >= 2
+    ? candidates
+    : [];
+};
+
 /** Older, uncertain history may support an estimate, never verified rates. */
 const toProvisionalSegments = (runs: Run[]): Segment[] => {
   const segments: Segment[] = [];
@@ -236,6 +300,7 @@ const toProvisionalSegments = (runs: Run[]): Segment[] => {
       });
     }
   }
+  segments.push(...observedGaugeJumps(runs));
   return segments;
 };
 
@@ -283,11 +348,19 @@ const estimateFromSegments = (
     const matching = segments.filter(
       (segment) => segment.from <= low && segment.to >= high
     );
+    // Once independent sessions corroborate the same gauge jump, normal
+    // intervals from other sessions cannot override that entire skipped band.
+    // Only use a jump rate where at least two observed jumps cover this step.
+    const jumps = matching.filter((segment) => segment.kind === "gauge_jump");
+    const selected =
+      new Set(jumps.map((segment) => segment.sessionId)).size >= 2
+        ? jumps
+        : matching;
     const typical = median(
-      matching.map((segment) => segment.minutesPerPercent)
+      selected.map((segment) => segment.minutesPerPercent)
     );
     if (typical !== undefined) {
-      matching.forEach((segment) => {
+      selected.forEach((segment) => {
         contributingSessions.add(segment.sessionId);
       });
       directlyCovered += high - low;
@@ -297,7 +370,7 @@ const estimateFromSegments = (
       low,
       high,
       minutesPerPercent: typical,
-      matching,
+      matching: selected,
     });
     total += high - low;
   }
@@ -324,7 +397,11 @@ const estimateFromSegments = (
   const selectedSegments = new Map<string, Segment>();
   for (const interval of intervals) {
     let rate = interval.minutesPerPercent;
-    let method: "measured" | "interpolated" = "measured";
+    let method: "measured" | "interpolated" =
+      interval.matching.length > 0 &&
+      interval.matching.every((segment) => segment.kind === "gauge_jump")
+        ? "interpolated"
+        : "measured";
     let selected = interval.matching;
     if (rate === undefined) {
       const nearest = measured.reduce((best, candidate) =>
@@ -452,7 +529,12 @@ export const predictChargingCurve = (
     let selectedRateUses: NonNullable<CurvePredictionDiagnostics["rateUses"]> =
       [];
     if (baseline === undefined) {
-      const verifiedSegments = toSegments(history);
+      // Keep strict verified rates, but do not ignore independently corroborated
+      // gauge jumps merely because the verified rate coverage exceeds 70%.
+      const verifiedSegments = [
+        ...toSegments(history),
+        ...observedGaugeJumps(history),
+      ];
       const verifiedAudit: SegmentEstimateAudit = {};
       const partial = estimateFromSegments(
         verifiedSegments,
@@ -497,7 +579,11 @@ export const predictChargingCurve = (
         baseline = partial.minutes;
         coverage = partial.coverage;
         runCount = partial.runCount;
-        selectedMethod = "verified_segments";
+        selectedMethod = partial.selectedSegments.some(
+          (segment) => segment.kind === "gauge_jump"
+        )
+          ? "provisional_segments"
+          : "verified_segments";
         selectedSegmentSet = partial.selectedSegments;
         selectedRateUses = partial.rateUses;
       }
