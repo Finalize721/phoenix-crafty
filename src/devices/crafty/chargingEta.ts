@@ -74,8 +74,9 @@ const storeHistory = (deviceId: string, history: BatterySample[]): void => {
   if (typeof localStorage === "undefined") return;
   try {
     localStorage.setItem(storageKey(deviceId), JSON.stringify(history));
-  } catch {
-    // Storage may be restricted, but current-session estimation still works.
+  } catch (error) {
+    // The live in-memory estimate still works, but future sessions lose data.
+    console.warn("Could not persist Crafty charging history:", error);
   }
 };
 
