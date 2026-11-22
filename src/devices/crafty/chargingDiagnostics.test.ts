@@ -320,6 +320,63 @@ describe("Crafty charging diagnostics", () => {
     }
   });
 
+  it("keeps ETA history without filling localStorage with repeated interval audits", () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    });
+    try {
+      for (let index = 0; index < 30; index++) {
+        appendChargingEtaTrace("crafty", {
+          kind: "eta_recalculation",
+          recordedAt: minute(index),
+          input: {
+            deviceId: "crafty",
+            currentLevel: index,
+            sessionId: "session",
+            calculationTime: minute(index),
+            historySampleCount: index,
+            historyFingerprint: "fnv1a-test",
+          },
+          previousEta: null,
+          updatedEta: null,
+          calculation: {
+            input: {
+              currentLevel: index,
+              currentSessionId: "session",
+              calculationTime: minute(index),
+              historySampleCount: index,
+              activeSessionSampleCount: index,
+            },
+            fallbackReason: null,
+            baseline: undefined,
+            liveAdjustment: { factor: 1, applied: false },
+            selectedIntervals: Array.from({ length: 100 }, () => ({
+              method: "verified_segment" as const,
+              sessionId: "x".repeat(250),
+              fromLevel: 40,
+              toLevel: 41,
+              startTime: 0,
+              endTime: minute(1),
+              elapsedMinutes: 1,
+            })),
+            coverageCandidates: {},
+          },
+        });
+      }
+      const stored = storage.get("craftyChargingDebugTrace:crafty") ?? "";
+      const entries = JSON.parse(stored);
+      expect(stored.length).toBeLessThanOrEqual(600_000);
+      expect(entries).toHaveLength(30);
+      expect(entries[0].calculation.selectedIntervals).toEqual([]);
+      expect(entries[0].input.historySampleCount).toBe(0);
+      expect(entries[29].calculation.selectedIntervals).toHaveLength(100);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("keeps estimator results identical when diagnostics are enabled", () => {
     const history = [
       sample(70, 0, "history"),
