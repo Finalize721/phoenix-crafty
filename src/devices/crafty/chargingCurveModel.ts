@@ -348,11 +348,19 @@ const estimateFromSegments = (
     const matching = segments.filter(
       (segment) => segment.from <= low && segment.to >= high
     );
+    // Once independent sessions corroborate the same gauge jump, normal
+    // intervals from other sessions cannot override that entire skipped band.
+    // Only use a jump rate where at least two observed jumps cover this step.
+    const jumps = matching.filter((segment) => segment.kind === "gauge_jump");
+    const selected =
+      new Set(jumps.map((segment) => segment.sessionId)).size >= 2
+        ? jumps
+        : matching;
     const typical = median(
-      matching.map((segment) => segment.minutesPerPercent)
+      selected.map((segment) => segment.minutesPerPercent)
     );
     if (typical !== undefined) {
-      matching.forEach((segment) => {
+      selected.forEach((segment) => {
         contributingSessions.add(segment.sessionId);
       });
       directlyCovered += high - low;
@@ -362,7 +370,7 @@ const estimateFromSegments = (
       low,
       high,
       minutesPerPercent: typical,
-      matching,
+      matching: selected,
     });
     total += high - low;
   }
