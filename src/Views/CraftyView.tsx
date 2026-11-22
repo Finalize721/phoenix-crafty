@@ -500,45 +500,43 @@ const CraftyChargingEta = () => {
       fallback={
         <>
           <Show when={canShowEta()}>
-            {() => (
-              <section
-                class="rounded-2xl border bg-card px-4 py-3 text-sm"
-                role="status"
-                aria-live="polite"
-              >
-                <p class="font-medium">
-                  {activity().manualOnly
-                    ? m.device_historicalEtaUnconfirmed()
-                    : m.device_isLikelyCharging()}
+            <section
+              class="rounded-2xl border bg-card px-4 py-3 text-sm"
+              role="status"
+              aria-live="polite"
+            >
+              <p class="font-medium">
+                {activity().manualOnly
+                  ? m.device_historicalEtaUnconfirmed()
+                  : m.device_isLikelyCharging()}
+              </p>
+              <Show when={visibleEta()?.provisional || activity().manualOnly}>
+                <p class="text-xs text-muted-foreground">
+                  {m.device_etaProvisional()}
                 </p>
-                <Show when={visibleEta()?.provisional || activity().manualOnly}>
-                  <p class="text-xs text-muted-foreground">
-                    {m.device_etaProvisional()}
+              </Show>
+              <Show
+                when={visibleEta()?.fullAt}
+                fallback={
+                  <p class="text-muted-foreground">
+                    {m.device_etaCalculating()}
                   </p>
-                </Show>
-                <Show
-                  when={visibleEta()?.fullAt}
-                  fallback={
+                }
+              >
+                {(fullAt) => (
+                  <>
                     <p class="text-muted-foreground">
-                      {m.device_etaCalculating()}
+                      {m.device_etaRemaining({
+                        duration: duration(remainingMinutes(fullAt())),
+                      })}
                     </p>
-                  }
-                >
-                  {(fullAt) => (
-                    <>
-                      <p class="text-muted-foreground">
-                        {m.device_etaRemaining({
-                          duration: duration(remainingMinutes(fullAt())),
-                        })}
-                      </p>
-                      <p class="text-muted-foreground">
-                        {m.device_etaAt({ time: timeAtFull(fullAt()) })}
-                      </p>
-                    </>
-                  )}
-                </Show>
-              </section>
-            )}
+                    <p class="text-muted-foreground">
+                      {m.device_etaAt({ time: timeAtFull(fullAt()) })}
+                    </p>
+                  </>
+                )}
+              </Show>
+            </section>
           </Show>
           <Show when={canOfferManualEta()}>
             <button
