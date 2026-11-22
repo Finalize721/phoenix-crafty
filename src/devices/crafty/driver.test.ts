@@ -162,6 +162,48 @@ describe("Crafty driver", () => {
     await driver.dispose();
   });
 
+  it("re-reads live temperature, battery, and heater state as snapshots", async () => {
+    const { driver, characteristics, state } = await collect();
+    const battery = characteristicOf(characteristics, UUID.powerChanged);
+    const temperature = characteristicOf(
+      characteristics,
+      UUID.currTemperatureChanged
+    );
+    const setpoint = characteristicOf(characteristics, UUID.writeTemp);
+    const projectRegister = characteristicOf(
+      characteristics,
+      UUID.handleProjectRegister
+    );
+    const batteryRead = vi.spyOn(battery, "readValue").mockResolvedValue(
+      new DataView(new Uint8Array([88, 0]).buffer)
+    );
+    vi.spyOn(temperature, "readValue").mockResolvedValue(
+      new DataView(new Uint8Array([0x08, 0x07]).buffer)
+    );
+    vi.spyOn(setpoint, "readValue").mockResolvedValue(
+      new DataView(new Uint8Array([0x08, 0x07]).buffer)
+    );
+    vi.spyOn(projectRegister, "readValue").mockResolvedValue(
+      new DataView(new Uint8Array([0, 0]).buffer)
+    );
+    const origins: string[] = [];
+    driver.subscribe((update, origin) => {
+      if (update.batteryLevel !== undefined) origins.push(origin ?? "unknown");
+    });
+
+    await driver.refreshLiveState();
+
+    expect(state).toMatchObject({
+      targetTemp: 180,
+      currentTemp: 180,
+      batteryLevel: 88,
+      projectRegister: 0,
+    });
+    expect(origins).toEqual(["snapshot"]);
+    expect(batteryRead).toHaveBeenCalledTimes(1);
+    await driver.dispose();
+  });
+
   it("reads the serial number and detects a Crafty+", async () => {
     const { driver } = await collect();
     expect(driver.serialNumber).toBe("CY123456");

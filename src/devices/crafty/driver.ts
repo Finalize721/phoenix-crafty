@@ -127,6 +127,14 @@ const DIAGNOSTICS: (keyof Characteristics)[] = [
 
 const FACTORY_RESET_SETTLE_MS = 1000;
 
+// Values that can become stale if browser/Android pauses GATT notifications.
+const LIVE_STATE: (keyof Characteristics)[] = [
+  "targetTemp",
+  "currentTemp",
+  "battery",
+  "projectRegister",
+];
+
 export interface CraftyInfo {
   firmwareVersion: string;
   serialNumber: string;
@@ -153,6 +161,8 @@ export interface CraftyDriver {
   factoryReset(): Promise<void>;
   /** Re-reads the registers the analysis looks at */
   readDiagnostics(): Promise<void>;
+  /** Reconciles on-screen telemetry after background/resume. */
+  refreshLiveState(): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -220,6 +230,11 @@ export const createCraftyDriver = (
     },
     async readDiagnostics() {
       for (const key of DIAGNOSTICS) {
+        await device.read(key);
+      }
+    },
+    async refreshLiveState() {
+      for (const key of LIVE_STATE) {
         await device.read(key);
       }
     },
