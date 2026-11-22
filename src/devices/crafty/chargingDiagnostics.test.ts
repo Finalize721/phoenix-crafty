@@ -348,6 +348,7 @@ describe("Crafty charging diagnostics", () => {
     expect(
       predictChargingCurve(history, 80, "current", minute(100), diagnostics)
     ).toEqual(predictChargingCurve(history, 80, "current", minute(100)));
-    expect(diagnostics.selectedIntervals).toHaveLength(1);
+    expect(diagnostics.selectedIntervals).toHaveLength(3);
+    expect(diagnostics.baseline?.method).toBe("verified_segments");
   });
 });
