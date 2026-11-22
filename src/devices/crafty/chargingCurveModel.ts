@@ -213,7 +213,9 @@ const toProvisionalSegments = (runs: Run[]): Segment[] => {
         before.heaterActive === true ||
         after.heaterActive === true ||
         before.origin === "snapshot" ||
-        after.origin === "snapshot"
+        after.origin === "snapshot" ||
+        before.breakBefore === true ||
+        after.continuousSincePrevious === false
       ) {
         continue;
       }
@@ -441,47 +443,14 @@ export const predictChargingCurve = (
   const history = runs.filter((run) => run.sessionId !== currentSessionId);
   if (history.length) {
     const complete = history.filter(observedTarget);
-    const exact = complete.flatMap((run) => {
-      const from = atLevel(run, currentLevel);
-      const to = atLevel(run, targetLevel);
-      return from !== undefined && to !== undefined && to > from
-        ? [
-            {
-              minutes: (to - from) / MINUTE,
-              sessionId: run.sessionId,
-              from,
-              to,
-            },
-          ]
-        : [];
-    });
-    let baseline = median(exact.map((run) => run.minutes));
-    let coverage = exact.length ? 1 : 0;
-    let runCount = exact.length;
-    const verifiedFullRun = exact.length > 0;
-    let selectedMethod:
-      | "completed_runs"
-      | "verified_segments"
-      | "provisional_segments"
-      | undefined;
+    // Use all reliable overlapping portions, not only runs that reached 99%.
+    let baseline: number | undefined;
+    let coverage = 0;
+    let runCount = 0;
+    let selectedMethod: "verified_segments" | "provisional_segments" | undefined;
     let selectedSegmentSet: Segment[] = [];
     let selectedRateUses: NonNullable<CurvePredictionDiagnostics["rateUses"]> =
       [];
-    if (baseline !== undefined) {
-      selectedMethod = "completed_runs";
-      if (diagnostics) {
-        diagnostics.selectedIntervals = exact.map((run) => ({
-          method: "completed_run",
-          sessionId: run.sessionId,
-          fromLevel: currentLevel,
-          toLevel: targetLevel,
-          startTime: run.from,
-          endTime: run.to,
-          elapsedMinutes: run.minutes,
-        }));
-      }
-    }
-
     if (baseline === undefined) {
       const verifiedSegments = toSegments(history);
       const verifiedAudit: SegmentEstimateAudit = {};
@@ -495,8 +464,8 @@ export const predictChargingCurve = (
       );
       const accepted =
         partial &&
-        (complete.length > 0 ||
-          (partial.coverage >= 0.7 && nearTargetWasObserved));
+        partial.coverage >= 0.7 &&
+        nearTargetWasObserved;
       const rejectionReasons = [
         ...(!partial
           ? [
@@ -508,10 +477,10 @@ export const predictChargingCurve = (
                   : "no_contributing_verified_sessions",
             ]
           : []),
-        ...(partial && complete.length === 0 && partial.coverage < 0.7
+        ...(partial && partial.coverage < 0.7
           ? ["verified_coverage_below_70_percent"]
           : []),
-        ...(partial && complete.length === 0 && !nearTargetWasObserved
+        ...(partial && !nearTargetWasObserved
           ? ["no_verified_observation_at_or_above_97_percent"]
           : []),
       ];
@@ -598,7 +567,9 @@ export const predictChargingCurve = (
       };
       const first = points.find(
         (point) =>
-          point.level >= currentLevel - 20 && point.level <= currentLevel - 8
+          point.level >= currentLevel - 20 &&
+          point.level <= currentLevel - 8 &&
+          activeIntervals.some((interval) => interval.startTime === point.time)
       );
       if (first && chargingObserved && last.time - first.time >= 5 * MINUTE) {
         const typical = median(
@@ -627,7 +598,7 @@ export const predictChargingCurve = (
       if (diagnostics) {
         diagnostics.fallbackReason = null;
         diagnostics.baseline = {
-          method: selectedMethod ?? "completed_runs",
+          method: selectedMethod ?? "verified_segments",
           minutes: baseline,
           coverage,
           runCount,
@@ -635,8 +606,7 @@ export const predictChargingCurve = (
         diagnostics.liveAdjustment = adjustmentDetails;
         diagnostics.rateUses =
           selectedRateUses.length > 0 ? selectedRateUses : undefined;
-        if (selectedMethod !== "completed_runs") {
-          diagnostics.selectedIntervals = selectedSegmentSet.map((segment) => ({
+        diagnostics.selectedIntervals = selectedSegmentSet.map((segment) => ({
             method:
               selectedMethod === "verified_segments"
                 ? "verified_segment"
@@ -649,7 +619,6 @@ export const predictChargingCurve = (
             elapsedMinutes: segment.elapsedMinutes,
             minutesPerPercent: segment.minutesPerPercent,
           }));
-        }
       }
       return {
         remainingMinutes: Math.max(1, Math.ceil(baseline * adjustment)),
@@ -657,7 +626,8 @@ export const predictChargingCurve = (
         targetLevel,
         historicalRunCount: runCount,
         adaptedToLive,
-        provisional: !verifiedFullRun || coverage < 1 || !chargingObserved,
+        provisional:
+          selectedMethod !== "verified_segments" || coverage < 1 || !chargingObserved,
         chargingObserved,
       };
     }
@@ -671,18 +641,26 @@ export const predictChargingCurve = (
     );
     return undefined;
   }
-  const latestMeasured = toSegments([active]).find(
-    (segment) => segment.to === currentLevel
+  // Use a contiguous suffix of measured intervals, rather than extrapolating
+  // one percentage jump or requiring each individual interval to last 2 min.
+  const recent = toSegments([active]).filter(
+    (segment) => segment.startTime >= last.time - RISE_WINDOW
   );
-  if (!latestMeasured) {
-    setFallback("no_eligible_live_charging_interval");
+  const measured: Segment[] = [];
+  let endTime = last.time;
+  for (let index = recent.length - 1; index >= 0; index--) {
+    const segment = recent[index];
+    if (segment.endTime !== endTime) break;
+    measured.unshift(segment);
+    endTime = segment.startTime;
+  }
+  const duration = measured.reduce((sum, segment) => sum + segment.elapsedMinutes, 0);
+  const gain = measured.reduce((sum, segment) => sum + segment.to - segment.from, 0);
+  if (measured.length < 2 || duration < 2 || gain < 2) {
+    setFallback("insufficient_contiguous_live_measurements");
     return undefined;
   }
-  if (latestMeasured.elapsedMinutes < 2) {
-    setFallback("live_charging_interval_shorter_than_two_minutes");
-    return undefined;
-  }
-  const rate = latestMeasured.minutesPerPercent;
+  const rate = duration / gain;
   if (!Number.isFinite(rate) || rate <= 0) {
     setFallback("invalid_live_charging_rate");
     return undefined;
@@ -695,18 +673,16 @@ export const predictChargingCurve = (
     diagnostics.fallbackReason = null;
     diagnostics.liveAdjustment.liveRateMinutesPerPercent = rate;
     diagnostics.liveAdjustment.liveRemainingMinutes = remainingMinutes;
-    diagnostics.selectedIntervals = [
-      {
-        method: "live_segment",
-        sessionId: latestMeasured.sessionId,
-        fromLevel: latestMeasured.from,
-        toLevel: latestMeasured.to,
-        startTime: latestMeasured.startTime,
-        endTime: latestMeasured.endTime,
-        elapsedMinutes: latestMeasured.elapsedMinutes,
-        minutesPerPercent: rate,
-      },
-    ];
+    diagnostics.selectedIntervals = measured.map((segment) => ({
+      method: "live_segment",
+      sessionId: segment.sessionId,
+      fromLevel: segment.from,
+      toLevel: segment.to,
+      startTime: segment.startTime,
+      endTime: segment.endTime,
+      elapsedMinutes: segment.elapsedMinutes,
+      minutesPerPercent: segment.minutesPerPercent,
+    }));
     diagnostics.rateUses = Array.from(
       { length: targetLevel - currentLevel },
       (_, index) => ({
@@ -714,7 +690,7 @@ export const predictChargingCurve = (
         toLevel: currentLevel + index + 1,
         minutesPerPercent: rate,
         durationMinutes: rate,
-        method: "measured" as const,
+        method: "interpolated" as const,
       })
     );
   }
