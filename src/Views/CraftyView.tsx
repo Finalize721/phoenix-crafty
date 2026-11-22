@@ -470,12 +470,20 @@ const CraftyChargingEta = () => {
     }).format(fullAt);
   const canShowEta = () =>
     activity().showEta && !derived.isHeaterActive();
-  const visibleEta = () => {
+  const visibleFullAt = () => {
     const estimate = eta();
-    return estimate?.fullAt !== undefined && estimate.fullAt > now()
-      ? estimate
+    if (!estimate) return undefined;
+    // An unconfirmed historical preview means "if charging starts now".
+    // Without observed charging, elapsed wall time must not count down an
+    // unchanged battery level towards a fictitious completion timestamp.
+    if (activity().manualOnly && !estimate.chargingObserved) {
+      return now() + estimate.remainingMinutes * 60_000;
+    }
+    return estimate.fullAt !== undefined && estimate.fullAt > now()
+      ? estimate.fullAt
       : undefined;
   };
+  const visibleEta = () => (visibleFullAt() === undefined ? undefined : eta());
   const canOfferManualEta = () =>
     Boolean(eta()) &&
     activity().canComputeHistoricalEta &&
@@ -516,7 +524,7 @@ const CraftyChargingEta = () => {
                 </p>
               </Show>
               <Show
-                when={visibleEta()?.fullAt}
+                when={visibleFullAt()}
                 fallback={
                   <p class="text-muted-foreground">
                     {m.device_etaCalculating()}
