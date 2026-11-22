@@ -410,9 +410,15 @@ describe("Crafty+ historical ETA to 99%", () => {
         ),
       ];
     };
+    const slowerMiddle = (id: string, start: number) =>
+      Array.from({ length: 26 }, (_, index) =>
+        point(40 + index, start + index * 0.9, id)
+      );
     const history = [
       ...charge("observed-a", 0, 42),
       ...charge("observed-b", 100, 38),
+      ...slowerMiddle("slow-a", 200),
+      ...slowerMiddle("slow-b", 240),
     ];
     const sample = point(6, 300, "current", { origin: "snapshot" });
     const estimate = predictChargingCurve(
