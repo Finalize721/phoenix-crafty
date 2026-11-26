@@ -162,7 +162,6 @@
   "device_showChargingEta": "Show charging estimate",
   "device_hideChargingEta": "Hide charging estimate",
   "device_etaCalculating": "Calculating…",
-  "device_etaRemaining": "Time remaining: {duration}",
   "device_etaAt": "Expected full at {time}",
   "workflow_new": "New",
   "workflow_rename": "Rename",
