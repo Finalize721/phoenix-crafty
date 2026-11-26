@@ -14,7 +14,8 @@ import {
   Show,
   untrack,
 } from "solid-js";
-import { BatteryHeaderStatus } from "../components/BatteryChip";
+import { BatteryChip, BatteryNotifyToggle } from "../components/BatteryChip";
+import { ChargingPresentationContext } from "../components/crafty/ChargingGauge";
 import { ShutdownTime } from "../components/crafty/ShutdownTime";
 import { Temperature } from "../components/crafty/Temperature";
 import { DeviceShell } from "../components/DeviceShell";
@@ -160,13 +161,18 @@ export const CraftyView: Component = () => {
 const CraftyBattery = () => {
   const { state } = useCrafty();
   return (
-    <BatteryHeaderStatus
+    <BatteryChip
       level={state.loaded ? state.batteryLevel : undefined}
     />
   );
 };
 
-const CraftyChargingEta = () => {
+const CraftyChargeNotification = () => {
+  const { state } = useCrafty();
+  return <BatteryNotifyToggle level={state.loaded ? state.batteryLevel : undefined} />;
+};
+
+const CraftyChargingEta = (props: { children: JSX.Element }) => {
   const { state, derived, isCraftyPlus } = useCrafty();
   const { connectionState, deviceInfo, knownDevice } = useBluetooth();
   const [eta, setEta] = createSignal<
@@ -503,71 +509,24 @@ const CraftyChargingEta = () => {
   };
 
   return (
-    <Show
-      when={state.loaded && isCraftyPlus && state.batteryLevel >= 99}
-      fallback={
-        <>
-          <Show when={canShowEta()}>
-            <section
-              class="rounded-2xl border bg-card px-4 py-3 text-sm"
-              role="status"
-              aria-live="polite"
-            >
-              <p class="font-medium">
-                {activity().manualOnly
-                  ? m.device_historicalEtaUnconfirmed()
-                  : m.device_isLikelyCharging()}
-              </p>
-              <Show when={visibleEta()?.provisional || activity().manualOnly}>
-                <p class="text-xs text-muted-foreground">
-                  {m.device_etaProvisional()}
-                </p>
-              </Show>
-              <Show
-                when={visibleFullAt()}
-                fallback={
-                  <p class="text-muted-foreground">
-                    {m.device_etaCalculating()}
-                  </p>
-                }
-              >
-                {(fullAt) => (
-                  <>
-                    <p class="text-muted-foreground">
-                      {m.device_etaRemaining({
-                        duration: duration(remainingMinutes(fullAt())),
-                      })}
-                    </p>
-                    <p class="text-muted-foreground">
-                      {m.device_etaAt({ time: timeAtFull(fullAt()) })}
-                    </p>
-                  </>
-                )}
-              </Show>
-            </section>
-          </Show>
-          <Show when={canOfferManualEta()}>
-            <button
-              type="button"
-              class="rounded-lg border bg-card px-3 py-2 text-sm text-muted-foreground"
-              onClick={activity().manualOnly ? hideManualEta : showManualEta}
-            >
-              {activity().manualOnly
-                ? m.device_hideChargingEta()
-                : m.device_showChargingEta()}
-            </button>
-          </Show>
-        </>
-      }
-    >
-      <section
-        class="rounded-2xl border bg-card px-4 py-3 text-sm"
-        role="status"
-        aria-live="polite"
-      >
-        <p class="font-medium">Voll (99%)</p>
-      </section>
-    </Show>
+    <ChargingPresentationContext.Provider value={{
+      show: canShowEta,
+      full: () => state.loaded && isCraftyPlus && state.batteryLevel >= 99,
+      manual: () => activity().manualOnly,
+      provisional: () => Boolean(visibleEta()?.provisional || activity().manualOnly),
+      remaining: () => {
+        const fullAt = visibleFullAt();
+        return fullAt === undefined ? undefined : duration(remainingMinutes(fullAt));
+      },
+      completionTime: () => {
+        const fullAt = visibleFullAt();
+        return fullAt === undefined ? undefined : timeAtFull(fullAt);
+      },
+      canOfferManual: canOfferManualEta,
+      toggleManual: () => activity().manualOnly ? hideManualEta() : showManualEta(),
+    }}>
+      {props.children}
+    </ChargingPresentationContext.Provider>
   );
 };
 
@@ -610,8 +569,10 @@ export const CraftyShell = (props: RouteSectionProps) => {
   return (
     <CraftyProvider>
       <CraftyLiveSession>
+        <CraftyChargingEta>
         <DeviceShell
           headerTrailing={<CraftyBattery />}
+          headerActions={<CraftyChargeNotification />}
           tabs={[
             {
               href: buildRoute.craftyRoot(),
@@ -630,9 +591,9 @@ export const CraftyShell = (props: RouteSectionProps) => {
             },
           ]}
         >
-          <CraftyChargingEta />
           {props.children}
         </DeviceShell>
+        </CraftyChargingEta>
       </CraftyLiveSession>
     </CraftyProvider>
   );
