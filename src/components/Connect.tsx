@@ -286,16 +286,16 @@ export const Connect = () => {
                 when={!isUnreachable()}
                 fallback={
                   <div class="flex w-full flex-col gap-2">
-                    <Button size="lg" class="w-full" onClick={connect}>
+                    <Button size="lg" class="w-full" onClick={connectKnownDevice}>
                       <Bluetooth />
-                      {m.connect_searchDevice()}
+                      {m.connect_retry()}
                     </Button>
                     <Button
                       variant="outline"
                       class="w-full"
-                      onClick={connectKnownDevice}
+                      onClick={connect}
                     >
-                      {m.connect_retry()}
+                      {m.connect_searchDevice()}
                     </Button>
                   </div>
                 }
