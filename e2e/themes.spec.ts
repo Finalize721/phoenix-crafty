@@ -9,7 +9,7 @@ test("mobile themes preserve appearance choices and Crafty controls", async ({
   await page.goto("/");
 
   const paletteButton = page.getByRole("button", {
-    name: "Atmosphäre anpassen",
+    name: "Customize appearance",
   });
   const palette = page.locator(".palette-popover");
   const choosePalette = async (skin: string) => {
@@ -100,7 +100,7 @@ test("custom base and accent colors persist in the palette", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  await page.getByRole("button", { name: "Atmosphäre anpassen" }).click();
+  await page.getByRole("button", { name: "Customize appearance" }).click();
   const palette = page.locator(".palette-popover");
   await palette.locator("select").selectOption("signal");
 
@@ -125,7 +125,7 @@ test("custom base and accent colors persist in the palette", async ({
   await expect(colors.nth(1)).toHaveValue("#c14372");
   await page.reload();
 
-  await page.getByRole("button", { name: "Atmosphäre anpassen" }).click();
+  await page.getByRole("button", { name: "Customize appearance" }).click();
   await expect(palette.locator("select")).toHaveValue("signal");
   await expect(palette.locator('input[type="color"]').nth(0)).toHaveValue(
     "#28445c"
