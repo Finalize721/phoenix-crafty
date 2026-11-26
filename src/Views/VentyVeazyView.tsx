@@ -4,7 +4,7 @@ import History from "lucide-solid/icons/rotate-ccw-clock";
 import SlidersHorizontal from "lucide-solid/icons/sliders-horizontal";
 import Thermometer from "lucide-solid/icons/thermometer";
 import { type Component, createEffect, type JSX, Show } from "solid-js";
-import { BatteryHeaderStatus } from "../components/BatteryChip";
+import { BatteryChip, BatteryNotifyToggle } from "../components/BatteryChip";
 import { DeviceShell } from "../components/DeviceShell";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -54,11 +54,16 @@ export const VentyVeazyView: Component = () => {
 const VentyVeazyBattery = () => {
   const { state } = useVentyVeazy();
   return (
-    <BatteryHeaderStatus
+    <BatteryChip
       level={state.status?.batteryLevel}
       charging={state.status?.isCharging ?? false}
     />
   );
+};
+
+const VentyVeazyChargeNotification = () => {
+  const { state } = useVentyVeazy();
+  return <BatteryNotifyToggle level={state.status?.batteryLevel} />;
 };
 
 const VentyVeazyLiveSession = (props: { children: JSX.Element }) => {
@@ -114,6 +119,7 @@ export const VentyVeazyShell = (props: RouteSectionProps) => {
       <VentyVeazyLiveSession>
         <DeviceShell
           headerTrailing={<VentyVeazyBattery />}
+          headerActions={<VentyVeazyChargeNotification />}
           tabs={[
             {
               href: buildRoute.ventyVeazyRoot(),
