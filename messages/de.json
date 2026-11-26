@@ -162,7 +162,6 @@
   "device_showChargingEta": "Ladeprognose anzeigen",
   "device_hideChargingEta": "Ladeprognose ausblenden",
   "device_etaCalculating": "Berechne…",
-  "device_etaRemaining": "Verbleibend: {duration}",
   "device_etaAt": "Voraussichtlich voll um {time}",
   "workflow_new": "Neu",
   "workflow_rename": "Umbenennen",
