@@ -1,3 +1,5 @@
+import { m } from "../../paraglide/messages";
+
 /** Bounded experiment: reapply the supported 300-second setting, never power on. */
 export const SESSION_EXTENSION_DURATIONS = [15, 30, 45, 60] as const;
 export type SessionExtensionDuration =
@@ -15,7 +17,7 @@ export const createSessionExtension = (io: {
   let deadline = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const stop = (
-    message = "Verlängerung beendet. Der Gerätetimer läuft normal weiter."
+    message = m.crafty_extensionEnded()
   ) => {
     generation++;
     clearTimeout(timer);
@@ -35,7 +37,7 @@ export const createSessionExtension = (io: {
     // Never queue another attempt while a prior Bluetooth operation is pending.
     const watchdog = setTimeout(() => {
       if (generation === run)
-        stop("Keine rechtzeitige Bluetooth-Antwort. Verlängerung gestoppt.");
+        stop(m.crafty_extensionTimedOut());
     }, 8_000);
     try {
       const before = await io.readRemaining();
@@ -57,20 +59,20 @@ export const createSessionExtension = (io: {
       }
       if (after === null || after < 290 || after > 300 || after <= before + 3) {
         stop(
-          "Kein Timer-Reset bestätigt. Dieses Gerät unterstützt den Versuch möglicherweise nicht."
+          m.crafty_extensionResetUnconfirmed()
         );
         return;
       }
       io.report(
         true,
-        "Timer-Reset bestätigt. Verlängerung noch " +
-          Math.ceil((deadline - now()) / 1000) +
-          " s."
+        m.crafty_extensionResetConfirmed({
+          seconds: Math.ceil((deadline - now()) / 1000),
+        })
       );
       schedule(run);
     } catch {
       if (generation === run)
-        stop("Timer konnte nicht bestätigt werden. Verlängerung gestoppt.");
+        stop(m.crafty_extensionReadFailed());
     } finally {
       clearTimeout(watchdog);
     }
@@ -81,14 +83,14 @@ export const createSessionExtension = (io: {
       if (!io.eligible()) {
         io.report(
           false,
-          "Heizung und Zieltemperatur müssen aktiv sein; Abschaltzeit auf 5 Minuten stellen."
+          m.crafty_extensionRequirements()
         );
         return;
       }
       deadline = now() + durationMinutes * 60_000;
       io.report(
         true,
-        `Versuch für ${durationMinutes} Minuten aktiv. Erster Timer-Test in 30 Sekunden.`
+        m.crafty_extensionStarted({ minutes: durationMinutes })
       );
       schedule(generation);
     },
