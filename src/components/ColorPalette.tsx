@@ -1,6 +1,6 @@
 import * as Popover from "@kobalte/core/popover";
 import PaletteIcon from "lucide-solid/icons/palette";
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For } from "solid-js";
 import { m } from "../paraglide/messages";
 
 const palettes = [
@@ -181,30 +181,26 @@ export const ColorPalette = () => {
   };
 
   return (
-    <div class="color-palette">
-      <Popover.Root placement="bottom-start" gutter={8}>
+    <div class="shrink-0">
+      <Popover.Root placement="bottom-end" gutter={8}>
         <Popover.Trigger
           class="palette-trigger"
-          aria-label="Atmosphäre anpassen"
-          title="Atmosphäre anpassen"
+          aria-label={m.settings_customizeAppearance()}
+          title={m.settings_customizeAppearance()}
         >
           <PaletteIcon class="size-5" aria-hidden="true" />
-          <span class="sr-only">Atmosphäre anpassen</span>
+          <span class="sr-only">{m.settings_customizeAppearance()}</span>
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Content class="palette-popover">
             <div class="palette-heading">
-              <strong>Atmosphäre</strong>
+              <strong>{m.settings_appearance()}</strong>
               <span>
-                <Show
-                  when={customBase()}
-                  fallback={
-                    palettes.find((choice) => choice.id === palette())?.name
-                  }
-                >
-                  Custom ·{" "}
-                  {palettes.find((choice) => choice.id === palette())?.name}
-                </Show>
+                {customBase()
+                  ? m.settings_customPalette({
+                      name: palettes.find((choice) => choice.id === palette())!.name,
+                    })
+                  : palettes.find((choice) => choice.id === palette())?.name}
               </span>
             </div>
             <label class="palette-field">
@@ -220,10 +216,10 @@ export const ColorPalette = () => {
               </select>
             </label>
             <label class="palette-field">
-              <span>Grundfarbe</span>
+              <span>{m.settings_baseColor()}</span>
               <input
                 type="color"
-                aria-label="Grundfarbe"
+                aria-label={m.settings_baseColor()}
                 value={customBase() ?? defaultBase(palette())}
                 onInput={(event) => selectBaseColor(event.currentTarget.value)}
               />
@@ -238,18 +234,11 @@ export const ColorPalette = () => {
               />
             </label>
             <button class="palette-reset" type="button" onClick={resetColors}>
-              Preset-Farben wiederherstellen
+              {m.settings_resetPalette()}
             </button>
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>
-      <a
-        href="https://github.com/Finalize721/phoenix-crafty"
-        target="_blank"
-        rel="noopener"
-      >
-        Quellcode ↗
-      </a>
     </div>
   );
 };

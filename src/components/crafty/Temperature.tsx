@@ -14,6 +14,7 @@ import {
 import { TemperatureDisplay } from "../TemperatureDisplay";
 import { TemperatureGauge } from "../TemperatureGauge";
 import { Alert, AlertDescription } from "../ui/alert";
+import { CraftyGauge } from "./ChargingGauge";
 
 export const Temperature = () => {
   const { state, actions, derived, isOldFirmware } = useCrafty();
@@ -23,6 +24,7 @@ export const Temperature = () => {
 
   return (
     <>
+      <CraftyGauge>
       <TemperatureGauge
         current={currentTemp()}
         target={state.targetTemp}
@@ -40,6 +42,7 @@ export const Temperature = () => {
           raisedUnit
         />
       </TemperatureGauge>
+      </CraftyGauge>
 
       <TargetStepper
         label={m.temperature_target()}

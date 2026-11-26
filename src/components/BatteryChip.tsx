@@ -56,10 +56,9 @@ export const BatteryChip = (props: {
   );
 };
 
-/** Battery level and its quick 99% notification toggle for the device header. */
-export const BatteryHeaderStatus = (props: {
+/** Quick 99% notification toggle for the device header. */
+export const BatteryNotifyToggle = (props: {
   level: number | undefined;
-  charging?: boolean;
 }) => {
   const [notifyAt99, setNotifyAt99] = createSignal(
     getBatteryNotifyPreference(99)
@@ -87,7 +86,6 @@ export const BatteryHeaderStatus = (props: {
 
   return (
     <Show when={props.level !== undefined}>
-      <div class="flex shrink-0 items-center gap-1">
         <Button
           variant="outline"
           size="icon"
@@ -102,8 +100,6 @@ export const BatteryHeaderStatus = (props: {
             <BellRing />
           </Show>
         </Button>
-        <BatteryChip level={props.level} charging={props.charging} />
-      </div>
     </Show>
   );
 };

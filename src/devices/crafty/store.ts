@@ -1,5 +1,6 @@
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import { createStore } from "solid-js/store";
+import { m } from "../../paraglide/messages";
 import type { AnalysisResult } from "../shared/analysis";
 import { createDebouncedWriter } from "../shared/debouncedWriter";
 import type {
@@ -170,7 +171,7 @@ export const createCraftyStore = (
   const visibilityChanged = () => {
     if (document.visibilityState !== "visible" && extension().active)
       session.stop(
-        "App im Hintergrund. Verlängerung gestoppt; Gerätetimer läuft weiter."
+        m.crafty_extensionBackground()
       );
     if (document.visibilityState !== "visible") clearTimeout(refreshTimer);
     else refreshOnForeground();

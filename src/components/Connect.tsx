@@ -13,7 +13,8 @@ import { useBluetooth } from "../provider/BluetoothProvider";
 import { buildRoute } from "../routes";
 import { ConnectionState, DeviceType } from "../utils/uuids";
 import { decodeWorkflow, getPendingWorkflowCode } from "../utils/workflowShare";
-import { CaffeineToggle, deviceLabel } from "./AppHeader";
+import { CaffeineToggle, deviceLabel, ThemeToggle } from "./AppHeader";
+import { ColorPalette } from "./ColorPalette";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -185,7 +186,9 @@ export const Connect = () => {
         aria-hidden="true"
         class="pointer-events-none absolute top-24 left-1/2 size-[440px] -translate-x-1/2 rounded-full bg-[radial-gradient(closest-side,var(--glow),transparent)] opacity-0 fx:opacity-50 fx-strong:opacity-90"
       />
-      <div class="relative flex justify-end px-5 pt-[max(1.125rem,env(safe-area-inset-top))]">
+      <div class="relative mx-auto flex w-full max-w-lg justify-end gap-2 px-5 pt-[max(1.125rem,env(safe-area-inset-top))]">
+        <ColorPalette />
+        <ThemeToggle />
         <CaffeineToggle />
       </div>
 

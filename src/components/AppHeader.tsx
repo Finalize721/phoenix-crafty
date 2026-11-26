@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "./ui/alert-dialog";
+import { ColorPalette } from "./ColorPalette";
 import { Button } from "./ui/button";
 
 const DEVICE_TYPE_LABELS: Partial<Record<DeviceType, string>> = {
@@ -122,6 +123,8 @@ const DisconnectButton = () => {
 interface AppHeaderProps {
   /** Device specific status next to the buttons, e.g. the battery level */
   trailing?: JSX.Element;
+  /** Optional device actions in the second row, e.g. charge notification. */
+  actions?: JSX.Element;
 }
 
 /** Device name, connection status, quick controls and disconnect */
@@ -133,7 +136,8 @@ export const AppHeader = (props: AppHeaderProps) => {
   const deviceName = () => deviceLabel(deviceInfo());
 
   return (
-    <header class="flex items-center gap-3 pt-[max(1.125rem,env(safe-area-inset-top))] pb-3">
+    <header class="flex flex-col gap-2 pt-[max(1.125rem,env(safe-area-inset-top))] pb-2">
+      <div class="flex min-w-0 items-center gap-2">
       <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary [&_svg]:size-5">
         <Switch fallback={<BluetoothOff class="text-muted-foreground" />}>
           <Match when={isConnecting()}>
@@ -160,12 +164,17 @@ export const AppHeader = (props: AppHeaderProps) => {
           </Switch>
         </div>
       </div>
-      {props.trailing}
-      <ThemeToggle />
-      <CaffeineToggle />
-      <Show when={isConnected()}>
-        <DisconnectButton />
-      </Show>
+        <CaffeineToggle />
+        {props.trailing}
+      </div>
+      <div class="flex items-center justify-end gap-2">
+        <ColorPalette />
+        <ThemeToggle />
+        {props.actions}
+        <Show when={isConnected()}>
+          <DisconnectButton />
+        </Show>
+      </div>
     </header>
   );
 };

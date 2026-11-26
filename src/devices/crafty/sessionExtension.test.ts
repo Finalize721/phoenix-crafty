@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { m } from "../../paraglide/messages";
 import {
   createSessionExtension,
   SESSION_EXTENSION_DURATIONS,
@@ -39,7 +40,7 @@ it("stops if the official setting write does not reset the timer", async () => {
   session.start();
   await vi.advanceTimersByTimeAsync(120_000);
   expect(io.reapply).toHaveBeenCalledTimes(1);
-  expect(io.report.mock.lastCall?.[1]).toContain("Kein Timer-Reset");
+  expect(io.report.mock.lastCall?.[1]).toBe(m.crafty_extensionResetUnconfirmed());
 });
 it("does not send writes after cancellation while awaiting a read", async () => {
   const { io, session } = setup();
