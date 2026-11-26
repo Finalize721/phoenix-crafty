@@ -34,6 +34,7 @@ const NavTabLink = (props: { tab: NavTab }) => {
 interface DeviceShellProps {
   tabs: NavTab[];
   headerTrailing?: JSX.Element;
+  headerActions?: JSX.Element;
   children: JSX.Element;
 }
 
@@ -41,7 +42,7 @@ interface DeviceShellProps {
 export const DeviceShell = (props: DeviceShellProps) => {
   return (
     <div class="mx-auto flex min-h-dvh w-full max-w-lg flex-col px-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
-      <AppHeader trailing={props.headerTrailing} />
+      <AppHeader trailing={props.headerTrailing} actions={props.headerActions} />
       <main class="flex flex-1 flex-col gap-4 pt-1">{props.children}</main>
       <nav class="fixed inset-x-0 bottom-0 z-30 border-t bg-nav pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
         <div
