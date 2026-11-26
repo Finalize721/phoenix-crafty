@@ -1,232 +1,76 @@
-<div align="center">
+# Crafty Atelier
 
-# Reactive Volcano App
+Inoffizieller, auf den Crafty+ ausgerichteter Fork der [Reactive Volcano App](https://github.com/firsttris/reactive-volcano-app) mit zusätzlichen Akkufunktionen, automatischer Verbindung unter Android und individuell anpassbarer Oberfläche.
 
-**Steuere deinen Vaporizer direkt aus dem Browser.**<br>
-Inoffizielle Web-Bluetooth-App für Volcano Hybrid, Venty, Veazy und Crafty von Storz & Bickel:
-Live-Temperatur, Heizung und Pumpe, Aufheiz-Workflows, Geräteeinstellungen und Selbstdiagnose.<br>
-Kein App-Store, kein Konto, kein Server: Seite öffnen, verbinden, fertig.
+**[Crafty Atelier öffnen](https://finalize721.github.io/phoenix-crafty/)** · [English](README.md) · [Originalprojekt](https://github.com/firsttris/reactive-volcano-app)
 
-[![Build](https://github.com/firsttris/reactive-volcano-app/actions/workflows/build.yml/badge.svg?branch=main&event=push)](https://github.com/firsttris/reactive-volcano-app/actions/workflows/build.yml)
-[![Release](https://github.com/firsttris/reactive-volcano-app/actions/workflows/release.yml/badge.svg)](https://github.com/firsttris/reactive-volcano-app/actions/workflows/release.yml)
-[![Docker Image Version](https://img.shields.io/docker/v/tristanteu/reactive-volcano-app?sort=semver&logo=docker&logoColor=white&label=Docker%20Hub)](https://hub.docker.com/r/tristanteu/reactive-volcano-app)
-[![Docker Pulls](https://img.shields.io/docker/pulls/tristanteu/reactive-volcano-app?logo=docker&logoColor=white)](https://hub.docker.com/r/tristanteu/reactive-volcano-app)
-[![Plattformen](https://img.shields.io/badge/Plattform-amd64%20%7C%20arm64-lightgrey)](https://hub.docker.com/r/tristanteu/reactive-volcano-app/tags)
-[![Lizenz: AGPL-3.0](https://img.shields.io/badge/Lizenz-AGPL--3.0-blue)](LICENSE)
-<br>
-[![SolidJS](https://img.shields.io/badge/SolidJS-1.9-2c4f7c?logo=solid&logoColor=white)](https://www.solidjs.com/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white)](https://vite.dev/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-06b6d4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![PWA](https://img.shields.io/badge/PWA-installierbar-5a0fc8?logo=pwa&logoColor=white)](https://firsttris.github.io/reactive-volcano-app/docs/getting-started.html#install-as-an-app)
+[![GitHub Pages](https://github.com/Finalize721/phoenix-crafty/actions/workflows/pages.yml/badge.svg?branch=main)](https://github.com/Finalize721/phoenix-crafty/actions/workflows/pages.yml)
+[![Lizenz: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
-[**▶ App öffnen**](https://firsttris.github.io/reactive-volcano-app/) •
-[Warum?](#-warum) •
-[Funktionen](#-funktionen) •
-[Loslegen](#-loslegen) •
-[Selbst hosten](#-selbst-hosten) •
-[Dokumentation](https://firsttris.github.io/reactive-volcano-app/docs/) •
-[Entwicklung](#️-entwicklung)
+## Was unterscheidet den Fork vom Original?
 
-<img src="docs/hero.png" alt="Die Steuerung für einen Tisch-Vaporizer, ein Handgerät mit Boost-Modi und ein Handgerät mit Akkuanzeige" width="900">
-
-<sub>English: [README.md](README.md)</sub>
-
-</div>
-
-> [!IMPORTANT]
-> **Inoffizielles, unabhängiges Projekt.** Es steht in keiner Verbindung zur Storz & Bickel GmbH und
-> wird von ihr weder unterstützt noch autorisiert. *VOLCANO*, *VENTY*, *VEAZY*, *CRAFTY* und
-> *STORZ & BICKEL* sind Marken ihres jeweiligen Inhabers und werden hier nur genannt, um zu beschreiben,
-> mit welchen Geräten die App kompatibel ist. Offizielle App, Firmware und Support gibt es beim
-> Hersteller. Siehe [Rechtliche Hinweise](https://firsttris.github.io/reactive-volcano-app/docs/legal.html).
-
-## 💡 Warum?
-
-Volcano Hybrid, Venty, Veazy und Crafty sprechen Bluetooth Low Energy, und moderne Browser können über
-die [Web Bluetooth API](https://developer.mozilla.org/docs/Web/API/Web_Bluetooth_API) direkt mit ihnen
-reden. Dieses Projekt macht daraus eine schnelle, aufgeräumte App, die überall läuft, wo Chrome oder
-Edge läuft, als Alternative zur App des Herstellers:
-
-- **Nichts zu installieren**: eine Webseite, die auf Wunsch als App auf dem Startbildschirm landet.
-  Läuft auf Android, Windows, macOS, ChromeOS und Linux, auf iOS mit einem Web-Bluetooth-Browser.
-- **Live**: Temperatur und Zustand kommen als Bluetooth-Benachrichtigung, sobald das Gerät sie sendet
-  (Handgeräte mit nur einem Steuerkanal werden zweimal pro Sekunde abgefragt), und jede Änderung ist in
-  Sekundenbruchteilen geschrieben.
-- **Workflows**: automatisiere eine Session am Tischgerät: auf 170 °C heizen, halten, Pumpe laufen
-  lassen, auf 175 °C erhöhen und so weiter. Eigene Abläufe bauen und als JSON teilen.
-- **Privat von Grund auf**: Es gibt kein Backend. Die App spricht nur mit deinem Gerät, speichert ihre
-  Daten in deinem Browser und hat kein Tracking, keine Analyse und keine Konten.
-- **Offen und selbst hostbar**: ein kleiner nginx-Container für amd64 und arm64 oder jeder statische
-  Webserver.
-
-## ✨ Funktionen
-
-| | Tischgerät · *Volcano Hybrid* | Handgerät · *Venty* / *Veazy* | Handgerät · *Crafty / Crafty+* |
-|---|:---:|:---:|:---:|
-| 🌡️ Aktuelle und Zieltemperatur live, mit Aufheizfortschritt | ✅ | ✅ | ✅ |
-| 🔥 Heizung an/aus | ✅ | ✅ | ✅ |
-| 💨 Luftpumpe an/aus | ✅ | | |
-| 🚀 Boost- und Superboost-Offsets, Heizmodi | | ✅ | Boost |
-| 🔁 Workflows: mehrstufig Heizen / Halten / Pumpen, JSON-Import & -Export | ✅ | | |
-| 🔋 Akkustand und Ladezustand | | ✅ | ✅ |
-| 🔆 Helligkeit, Vibration, °C / °F | ✅ | ✅ | ✅ |
-| ⏱️ Abschaltzeit | ✅ | | ✅ |
-| 🔌 Öko-Laden (Ladestrom, Ladespannung), Dauer-Boost | | ✅ | |
-| 📶 Bluetooth dauerhaft an | | Veazy | ✅ |
-| 💡 Lade-LED | | | ✅ |
-| 📍 Gerät finden | | Veazy | Crafty+ |
-| 🩺 Selbstdiagnose mit verständlichen Hinweisen | ✅ | ✅ | ✅ |
-| ℹ️ Seriennummer, Firmware, Betriebszeit | ✅ | ✅ | ✅ |
-| ♻️ Werkseinstellungen | | ✅ | ✅ |
-
-Crafty-Geräte mit Firmware älter als 2.51 liefern weniger Werte: Ziel- und aktuelle Temperatur,
-Boost, Helligkeit und Akku funktionieren, der Rest wird ausgeblendet.
-
-**In der ganzen App**: hell und dunkel (folgt dem System), Deutsch und Englisch (folgt dem Browser),
-installierbare PWA mit Offline-Start, der Bildschirm bleibt an, solange geheizt wird oder ein Workflow
-läuft, klare Meldungen, wenn die Verbindung abreißt. Jede Seite ist in der
-[Bedienung](https://firsttris.github.io/reactive-volcano-app/docs/usage.html) beschrieben (englisch).
-
-## 📸 Screenshots
-
-<table>
-  <tr>
-    <td width="33%"><img src="docs/screenshot-connect.png" alt="Verbinden-Seite mit den unterstützten Geräten und Hilfe, wenn kein Gerät gefunden wird"><br><sub><b>Verbinden</b>: ein Tipp, mit Hilfe, falls nichts gefunden wird</sub></td>
-    <td width="33%"><img src="docs/screenshot-volcano-workflows.png" alt="Workflow-Liste mit vier Workflows und ihren Temperaturstufen"><br><sub><b>Workflows</b>: starten, bearbeiten, importieren, exportieren</sub></td>
-    <td width="33%"><img src="docs/screenshot-volcano-settings.png" alt="Einstellungen des Tischgeräts"><br><sub><b>Einstellungen</b>: Optionen, Infos und Diagnose</sub></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshot-venty-settings.png" alt="Einstellungen des Handgeräts: Helligkeit, Vibration, Boost, Öko-Laden"><br><sub><b>Handgerät</b>: Boost und Öko-Laden</sub></td>
-    <td><img src="docs/screenshot-crafty-settings.png" alt="Einstellungen des Crafty"><br><sub><b>Crafty</b>: Abschaltzeit, LED, Bluetooth</sub></td>
-    <td><img src="docs/screenshot-volcano-light.png" alt="Die Steuerung im hellen Modus"><br><sub><b>Hell</b>: folgt deinem System</sub></td>
-  </tr>
-</table>
-
-## 🚀 Loslegen
-
-1. **[firsttris.github.io/reactive-volcano-app](https://firsttris.github.io/reactive-volcano-app/)**
-   in Chrome, Edge oder Opera öffnen.
-2. Gerät einschalten und sicherstellen, dass es **nicht mit einem anderen Handy oder einer anderen App
-   verbunden** ist.
-3. **Gerät verbinden** tippen und das Gerät im Bluetooth-Dialog des Browsers auswählen.
-
-### 🌐 Browser
-
-| Plattform | Funktioniert mit | Hinweis |
-|---|---|---|
-| Android, Windows, macOS, ChromeOS | Chrome, Edge, Opera | Web Bluetooth ist standardmäßig an |
-| Linux | Chrome, Chromium | einmal `chrome://flags/#enable-web-bluetooth` aktivieren, siehe [Getting started](https://firsttris.github.io/reactive-volcano-app/docs/getting-started.html#linux) |
-| iOS, iPadOS | [Bluefy](https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055) | Safari kann kein Web Bluetooth |
-| Firefox, Safari | ❌ | kein Web Bluetooth |
-
-Gerät wird nicht gefunden? Die [Fehlersuche](https://firsttris.github.io/reactive-volcano-app/docs/troubleshooting.html) beginnt mit Chromes eingebauter
-Seite `chrome://bluetooth-internals` und zeigt in drei Schritten, ob Adapter, Browser oder Gerät das
-Problem ist.
-
-## 🐳 Selbst hosten
-
-Ein fertiges Image für `linux/amd64` und `linux/arm64` liegt auf
-[Docker Hub](https://hub.docker.com/r/tristanteu/reactive-volcano-app):
-
-```bash
-docker run -d --name vaporizer-app -p 8080:8080 --restart unless-stopped tristanteu/reactive-volcano-app:latest
-```
-
-Der Container betreibt nginx ohne Root-Rechte und lauscht auf Port **8080** (ältere Images: 80, siehe
-[Aktualisieren](https://firsttris.github.io/reactive-volcano-app/docs/self-hosting.html#updates)).
-
-<details>
-<summary><b>Docker Compose</b></summary>
-
-```yaml
-services:
-  vaporizer-app:
-    image: tristanteu/reactive-volcano-app:latest
-    ports:
-      - "8080:8080"
-    restart: unless-stopped
-```
-
-</details>
-
-<details>
-<summary><b>Podman Quadlet</b></summary>
-
-```bash
-curl -o ~/.config/containers/systemd/volcano-app.container \
-  https://raw.githubusercontent.com/firsttris/reactive-volcano-app/main/volcano-app.container
-systemctl --user daemon-reload && systemctl --user start volcano-app
-```
-
-</details>
-
-> [!NOTE]
-> Browser erlauben Bluetooth nur in einem **sicheren Kontext**: `https://…` oder `http://localhost`.
-> Wer seine Instanz von einem anderen Gerät aus nutzen will, braucht einen Reverse Proxy mit HTTPS.
-> Beispiele für Caddy, nginx und Traefik und den Betrieb unter einem Unterpfad stehen in
-> [Self-hosting](https://firsttris.github.io/reactive-volcano-app/docs/self-hosting.html).
-
-## 📚 Dokumentation
-
-Die ausführliche Dokumentation ist auf Englisch: [docs/README.md](https://firsttris.github.io/reactive-volcano-app/docs/), auch als Website
-mit Suche: **https://firsttris.github.io/reactive-volcano-app/docs/**
-
-| | |
+| Funktion | Beschreibung |
 |---|---|
-| [Getting started](https://firsttris.github.io/reactive-volcano-app/docs/getting-started.html) | Browser, Linux-Flag, iOS, Verbinden, als App installieren, Updates |
-| [Usage](https://firsttris.github.io/reactive-volcano-app/docs/usage.html) | jede Seite je Gerät: Steuerung, Boost, Einstellungen, Diagnose, Gerät finden |
-| [Workflows](https://firsttris.github.io/reactive-volcano-app/docs/workflows.html) | Ablauf eines Workflows, Bearbeiten, JSON-Format für Import und Export |
-| [Self-hosting](https://firsttris.github.io/reactive-volcano-app/docs/self-hosting.html) | Docker, Compose, Podman, HTTPS mit Caddy / nginx / Traefik, Unterpfade |
-| [Troubleshooting & FAQ](https://firsttris.github.io/reactive-volcano-app/docs/troubleshooting.html) | Gerät nicht gefunden, Verbindungsabbrüche, Linux, iOS, häufige Fragen |
-| [Privacy & security](https://firsttris.github.io/reactive-volcano-app/docs/privacy-security.html) | was die App speichert, was sie sendet (nichts), Berechtigungen |
-| [Architecture](https://firsttris.github.io/reactive-volcano-app/docs/architecture.html) | Schichten, Datenfluss, Bluetooth-Queue, Stores, Routing, PWA, Entscheidungen |
-| [Bluetooth protocol](https://firsttris.github.io/reactive-volcano-app/docs/protocol.html) | Services, Characteristics und Kodierung je Gerätefamilie |
-| [Development](https://firsttris.github.io/reactive-volcano-app/docs/development.html) | Einrichtung, Skripte, Projektstruktur, Konventionen, Übersetzungen, neues Gerät |
-| [Testing](https://firsttris.github.io/reactive-volcano-app/docs/testing.html) | Unit-Tests, Bluetooth-Mock, End-to-End-Tests, Screenshots, CI |
-| [Releases & deployment](https://firsttris.github.io/reactive-volcano-app/docs/releases.html) | GitHub Pages, Versionen, Docker-Images, Release-Workflow |
-| [Legal notice](https://firsttris.github.io/reactive-volcano-app/docs/legal.html) | Marken, keine Verbindung zum Hersteller, keine Gewährleistung, Sicherheit, Lizenz |
+| Automatische Verbindung unter Android | Beim App-Start in Android Chrome wird automatisch versucht, das zuletzt autorisierte Gerät zu verbinden. Erneute Verbindungsversuche haben Vorrang vor der Geräteauswahl. |
+| Ladeprognose | Geschätzte Restladezeit und Endzeit bis 99 % anhand lokaler Akkudaten und aktueller Beobachtungen. Historische Vorschau auch bei unbestätigtem Ladestatus. |
+| Akkudiagnose | Export von Akkumessungen, Prognoseverläufen und Berechnungsdetails als JSON zur Fehlersuche. |
+| Ladebenachrichtigung | Browserbenachrichtigung bei 99 %, sofern unterstützt und autorisiert. |
+| Akkugrenze | Dreifache Smartphone-Vibration und automatische Heizungsabschaltung unabhängig voneinander aktivierbar, bei frei wählbarer Akkugrenze (1–99 %, Standard 15 %). Beide standardmäßig aus. |
+| Experimentelle Session-Verlängerung | Zeitlich begrenzter Versuch (15, 30, 45 oder 60 Minuten), den unterstützten Fünf-Minuten-Abschalttimer mit Rückleseprüfung zurückzusetzen. |
+| Oberfläche | Drei Farbpaletten, eigene Grund- und Akzentfarben, dauerhaft gespeicherter Hell-/Dunkelmodus und neues Startbild/App-Symbole. |
+| Verlauf und Zuverlässigkeit | Einstellbare Aufbewahrungsdauer, erneutes Auslesen der Bluetooth-Werte bei Rückkehr zur App und genauere Prüfung von Akku-Beobachtungen. |
 
-## 🛠️ Entwicklung
+Der Fork baut auf der vorhandenen Gerätesteuerung, Session-Historie, Gerätewiedererkennung und automatischen Wiederverbindung nach Verbindungsabbrüchen des Originalprojekts auf. Er wird hauptsächlich für den Crafty+ entwickelt und genutzt. Andere vom Original unterstützte Geräte wurden für diesen Fork nicht unabhängig validiert.
 
-Voraussetzung: [Bun](https://bun.sh) (die Version aus `packageManager` in package.json).
+## Loslegen
+
+1. [Crafty Atelier](https://finalize721.github.io/phoenix-crafty/) in Chrome auf Android öffnen.
+2. Crafty+ einschalten und sicherstellen, dass kein anderes Smartphone und keine andere App verbunden ist.
+3. Bei der ersten Verbindung das Gerät im Bluetooth-Auswahldialog auswählen.
+4. Optional die PWA über das Browsermenü installieren. Nach dem ersten Laden kann die App auch offline starten.
+
+### Gerät über App-Neustarts hinweg merken
+
+Falls Chrome wiederholt zur Geräteauswahl auffordert, folgende Adresse öffnen:
+
+`chrome://flags/#enable-web-bluetooth-new-permissions-backend`
+
+**Use the new permissions backend for Web Bluetooth** auf Enabled setzen, sofern verfügbar, Chrome neu starten und das Gerät erneut autorisieren. Dies hat auf dem Android-Gerät des Fork-Entwicklers funktioniert. Die Verfügbarkeit hängt von Browser und Version ab.
+
+Die App speichert die Geräte-ID lokal und ruft das autorisierte Gerät über `navigator.bluetooth.getDevices()` ab. Die Berechtigung selbst verwaltet Chrome. Automatisches Verbinden erfordert ein erreichbares Gerät und kann Browserberechtigungen nicht umgehen.
+
+## Akku- und Session-Funktionen
+
+- **Ladeprognose:** experimentelle Schätzung, keine garantierte Endzeit. Die App schließt aus beobachteten Akkuänderungen auf den Ladestatus; ein bestätigtes Signal für ein angeschlossenes Ladegerät steht nicht zur Verfügung. Fehlende oder verzögerte Bluetooth-Daten können die Prognose beeinflussen.
+- **Akkugrenze:** in den Crafty+-Einstellungen die Grenze festlegen und die gewünschten Aktionen aktivieren. Bei Unterschreiten während einer aktiven Heizsession werden diese nach Erreichen der Zieltemperatur und erneuter Prüfung der Gerätedaten ausgeführt. Bewusstes erneutes Einschalten unterhalb der Grenze löst nicht sofort wieder eine Abschaltung aus. Die Warnung vibriert am **Smartphone**, nicht am Crafty+.
+- **Session-Verlängerung:** setzt aktive Heizung, erreichte Zieltemperatur, 300 Sekunden Abschaltzeit und sichtbare App voraus. Versucht alle 30 Sekunden, die Abschaltzeit erneut zu schreiben. Stoppt bei fehlender Bestätigung, Wegfall der Voraussetzungen, Verbindungsabbruch, Hintergrundbetrieb oder Zeitüberschreitung. Ob der Reset von der Firmware akzeptiert wird, muss am Gerät bestätigt werden. Schaltet die Heizung nie automatisch ein; nach dem Stoppen läuft der normale Gerätetimer weiter.
+
+Alle automatischen Aktionen benötigen die laufende App und eine aktive Bluetooth-Verbindung. Android kann den Browser im Hintergrund pausieren oder beenden. Diese Funktionen sind keine Sicherheitsmechanismen; das Gerät nicht unbeaufsichtigt lassen.
+
+Akkuhistorie und Einstellungen bleiben im Browser. Der lokale Diagnoseexport kann Gerätekennungen und Zeitstempel enthalten; vor dem Teilen prüfen.
+
+## Entwicklung
+
+Benötigt [Bun](https://bun.sh/) (siehe `packageManager` in package.json).
 
 ```bash
-git clone https://github.com/firsttris/reactive-volcano-app.git && cd reactive-volcano-app
-bun install
-bun run dev        # http://localhost:5173
+git clone https://github.com/Finalize721/phoenix-crafty.git
+cd phoenix-crafty
+bun install --frozen-lockfile
+bun run dev
 ```
-
-Kein Gerät zur Hand? Die End-to-End-Tests lassen die ganze App gegen einen simulierten
-Web-Bluetooth-Stack laufen; mit `bun run test:e2e:ui` kann man sich durchklicken.
-
-**Stack**: SolidJS mit `@solidjs/router` · Tailwind CSS 4 und [solid-ui](https://www.solid-ui.com)
-(Kobalte) · Paraglide JS für Deutsch und Englisch · `p-queue`, das jeden GATT-Zugriff serialisiert ·
-`vite-plugin-pwa` · Vitest, Playwright und Biome. Mehr in [Development](https://firsttris.github.io/reactive-volcano-app/docs/development.html) und
-[Architecture](https://firsttris.github.io/reactive-volcano-app/docs/architecture.html).
 
 ```bash
-bun run typecheck && bun run lint && bun run test && bun run test:e2e
+bun run test
+bun run build
 ```
 
-## 🤝 Mitwirken
+Pull Requests durchlaufen automatisierte Tests und den Produktions-Build. Pushes auf main veröffentlichen die App auf GitHub Pages.
 
-Fehlerberichte, Ideen und Pull Requests sind willkommen, siehe [CONTRIBUTING.md](CONTRIBUTING.md).
-Am meisten helfen Rückmeldungen von echten Geräten: bitte Gerät, Firmware-Version (unter
-*Einstellungen*), Browser und Betriebssystem angeben.
+*Entwicklungshinweis: Sämtliche Änderungen gegenüber dem Original wurden chatbasiert mit KI-Unterstützung entwickelt („Vibe Coding“), ohne unabhängiges menschliches Code-Review. Automatisierte Tests, KI-gestützte Prüfungen und gelegentliche Praxistests ersetzen weder ein menschliches Review noch umfassende Hardwarevalidierung. Die Ergänzungen sind experimentell.*
 
----
+## Originalprojekt und Lizenz
 
-<div align="center">
+Crafty Atelier basiert auf der [Reactive Volcano App](https://github.com/firsttris/reactive-volcano-app) von Tristan Teufel und Mitwirkenden. Die [ursprüngliche README](https://github.com/firsttris/reactive-volcano-app#readme) und [Upstream-Dokumentation](https://firsttris.github.io/reactive-volcano-app/docs/) enthalten die vollständige Geräteübersicht, Plattformunterstützung, Self-Hosting und Protokolldetails. Diese Dokumentation beschreibt das Originalprojekt und nicht zwingend alle Ergänzungen des Forks.
 
-⭐ Gefällt dir die Reactive Volcano App? Ein [Stern auf GitHub](https://github.com/firsttris/reactive-volcano-app) hilft anderen, es zu finden.<br>
-🐛 [Fehler melden](https://github.com/firsttris/reactive-volcano-app/issues/new) · 💡 [Idee vorschlagen](https://github.com/firsttris/reactive-volcano-app/issues/new)
-
-<sub>
-<a href="LICENSE">AGPL-3.0</a> · © Tristan Teufel und Mitwirkende · <a href="README.md">English version</a><br>
-Wer eine veränderte Version weitergibt oder für andere betreibt, muss ihren Quellcode unter der AGPL anbieten; eine kommerzielle Lizenz ohne diese Pflichten gibt es über <a href="https://teufel-it.de">teufel-it.de</a>.<br>
-Unabhängiges, inoffizielles Open-Source-Projekt. Es steht in keiner Verbindung zur Storz &amp; Bickel GmbH und wird von ihr weder unterstützt, gesponsert noch autorisiert.<br>
-STORZ &amp; BICKEL, VOLCANO, VOLCANO HYBRID, VENTY, VEAZY und CRAFTY sind Marken der Storz &amp; Bickel GmbH und werden nur zur Beschreibung der Kompatibilität genannt.<br>
-Bereitgestellt „wie besehen“, ohne Gewährleistung. Nutzung auf eigene Gefahr. <a href="docs/legal.md">Rechtliche Hinweise</a>
-</sub>
-</div>
+Lizenziert unter [AGPL-3.0](LICENSE), ursprüngliches Copyright und Lizenz bleiben erhalten. Unabhängiges, inoffizielles Projekt ohne Verbindung zur Storz & Bickel GmbH und ohne deren Unterstützung oder Autorisierung. CRAFTY, VOLCANO, VENTY, VEAZY und STORZ & BICKEL sind Marken ihrer jeweiligen Inhaber. Ohne Gewährleistung; Nutzung auf eigenes Risiko.
