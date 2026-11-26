@@ -1,3 +1,4 @@
+import ExternalLink from "lucide-solid/icons/external-link";
 import { createSignal, For } from "solid-js";
 import { m } from "../paraglide/messages";
 import {
@@ -127,6 +128,17 @@ export const AppSettingsSection = () => {
           />
           <span class="text-muted-foreground text-sm">{m.settings_days()}</span>
         </div>
+      </SettingRow>
+      <SettingRow label={m.settings_sourceCode()} description={m.settings_sourceCodeHint()}>
+        <a
+          href="https://github.com/Finalize721/phoenix-crafty"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={m.settings_sourceCode()}
+          class="flex size-11 shrink-0 items-center justify-center rounded-xl border bg-card text-primary"
+        >
+          <ExternalLink class="size-[18px]" />
+        </a>
       </SettingRow>
     </SettingsSection>
   );
