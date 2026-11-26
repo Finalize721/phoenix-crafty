@@ -2,7 +2,9 @@ import type { JSX } from "solid-js";
 import { createContext, Show, useContext } from "solid-js";
 import type { CraftyDriver } from "../devices/crafty/driver";
 import { type CraftyStore, createCraftyStore } from "../devices/crafty/store";
+import { m } from "../paraglide/messages";
 import { useBluetooth } from "./BluetoothProvider";
+import { useToast } from "./ToastProvider";
 
 const CraftyContext = createContext<CraftyStore>();
 
@@ -12,8 +14,25 @@ const CraftyStoreProvider = (props: {
 }) => {
   // Read once on purpose: one store per driver instance
   const { reportStartFailure } = useBluetooth();
-  const store = createCraftyStore(props.driver, (error) =>
-    reportStartFailure(props.driver, error)
+  const showToast = useToast();
+  const store = createCraftyStore(
+    props.driver,
+    (error) => reportStartFailure(props.driver, error),
+    {
+      onWarning: ({ level }) =>
+        showToast({
+          message: m.crafty_lowBatteryWarningMessage({ percentage: level }),
+        }),
+      onShutdown: () =>
+        showToast({ message: m.crafty_lowBatteryShutdownDone() }),
+      onError: (reason) =>
+        showToast({
+          message:
+            reason === "verification"
+              ? m.crafty_lowBatteryVerificationFailed()
+              : m.crafty_lowBatteryShutdownFailed(),
+        }),
+    }
   );
   return (
     <CraftyContext.Provider value={store}>

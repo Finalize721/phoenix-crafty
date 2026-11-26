@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { AnalysisResult } from "../shared/analysis";
 import { createDebouncedWriter } from "../shared/debouncedWriter";
@@ -8,6 +8,11 @@ import type {
   CraftyUpdateOrigin,
   CraftyValues,
 } from "./driver";
+import {
+  createLowBatteryProtection,
+  type LowBatteryErrorReason,
+} from "./lowBatteryProtection";
+import { getLowBatterySettings } from "./lowBatterySettings";
 import {
   analyzeCrafty,
   clamp,
@@ -40,6 +45,12 @@ export interface CraftyState extends CraftyValues {
   batteryReadingOrigin: CraftyUpdateOrigin | undefined;
 }
 
+export interface CraftyLowBatteryNotifications {
+  onWarning?: (details: { level: number; threshold: number }) => void;
+  onShutdown?: () => void;
+  onError?: (reason: LowBatteryErrorReason) => void;
+}
+
 /**
  * Reactive state for a connected Crafty. Must be called inside a Solid owner
  * (component/provider); starts the driver and unsubscribes on cleanup.
@@ -47,7 +58,8 @@ export interface CraftyState extends CraftyValues {
 export const createCraftyStore = (
   driver: CraftyDriver,
   /** Told when the first reads fail, so the app can report it */
-  onStartFailed?: (error: unknown) => void
+  onStartFailed?: (error: unknown) => void,
+  lowBatteryNotifications?: CraftyLowBatteryNotifications
 ) => {
   const [state, setState] = createStore<CraftyState>({
     loaded: false,
@@ -283,6 +295,32 @@ export const createCraftyStore = (
     isFindMyActive: () =>
       hasBit(state.statusRegister2, StatusRegister2Bit.FIND_DEVICE),
   };
+
+  const lowBattery = createLowBatteryProtection({
+    isLoaded: () => state.loaded,
+    isCraftyPlus: () => driver.isCraftyPlus,
+    getSettings: getLowBatterySettings,
+    getBattery: () => ({
+      level: state.batteryLevel,
+      readingId: state.batteryReadingId,
+      origin: state.batteryReadingOrigin,
+    }),
+    isHeaterActive: derived.isHeaterActive,
+    isSetpointReached: derived.isSetpointReached,
+    refreshLiveState: () => driver.refreshLiveState(),
+    stopSessionExtension: () => {
+      if (extension().active) session.stop();
+    },
+    heaterOff: () => driver.heaterOff(),
+    reportWarning: lowBatteryNotifications?.onWarning,
+    reportShutdown: lowBatteryNotifications?.onShutdown,
+    reportError: lowBatteryNotifications?.onError,
+  });
+  createEffect(() => {
+    // Settings are read untracked: changing them must not look like a reading.
+    lowBattery.update(untrack(getLowBatterySettings).threshold);
+  });
+  onCleanup(() => lowBattery.dispose());
 
   return {
     state,

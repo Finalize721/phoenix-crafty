@@ -17,6 +17,14 @@ import {
   createChargingDebugExport,
   downloadChargingDebugExport,
 } from "../devices/crafty/chargingDiagnostics";
+import {
+  getLowBatterySettings,
+  LOW_BATTERY_MAX_THRESHOLD,
+  LOW_BATTERY_MIN_THRESHOLD,
+  setLowBatteryShutdownEnabled,
+  setLowBatteryThreshold,
+  setLowBatteryWarningEnabled,
+} from "../devices/crafty/lowBatterySettings";
 import { Limits } from "../devices/crafty/protocol";
 import { m } from "../paraglide/messages";
 import { useBluetooth } from "../provider/BluetoothProvider";
@@ -25,9 +33,16 @@ import { APP_BUILD_INFO } from "../utils/buildInfo";
 import { formatDuration } from "../utils/heatProgress";
 
 export const CraftySettingsView: Component = () => {
-  const { state, actions, derived, firmwareVersion, isOldFirmware } =
-    useCrafty();
+  const {
+    state,
+    actions,
+    derived,
+    firmwareVersion,
+    isOldFirmware,
+    isCraftyPlus,
+  } = useCrafty();
   const { deviceInfo, knownDevice, rememberedDevice } = useBluetooth();
+  const lowBattery = getLowBatterySettings;
   const [chargingExportStatus, setChargingExportStatus] =
     createSignal<string>();
   const chargingDeviceId = () =>
@@ -108,6 +123,35 @@ export const CraftySettingsView: Component = () => {
           />
         </Show>
       </SettingsSection>
+
+      <Show when={isCraftyPlus}>
+        <SettingsSection title={m.settings_sectionLowBattery()}>
+          <p class="px-4 py-3.5 text-muted-foreground text-xs">
+            {m.crafty_lowBatteryAppOnly()}
+          </p>
+          <SettingSlider
+            label={m.crafty_lowBatteryThreshold()}
+            valueLabel={`${lowBattery().threshold} %`}
+            value={lowBattery().threshold}
+            min={LOW_BATTERY_MIN_THRESHOLD}
+            max={LOW_BATTERY_MAX_THRESHOLD}
+            step={1}
+            onChange={setLowBatteryThreshold}
+          />
+          <SettingSwitch
+            label={m.crafty_lowBatteryWarning()}
+            description={m.crafty_lowBatteryWarningHint()}
+            checked={lowBattery().warningEnabled}
+            onChange={setLowBatteryWarningEnabled}
+          />
+          <SettingSwitch
+            label={m.crafty_lowBatteryShutdown()}
+            description={m.crafty_lowBatteryShutdownHint()}
+            checked={lowBattery().shutdownEnabled}
+            onChange={setLowBatteryShutdownEnabled}
+          />
+        </SettingsSection>
+      </Show>
 
       <AppSettingsSection />
 

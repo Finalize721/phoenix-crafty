@@ -192,7 +192,6 @@
   "settings_notifyReached": "Benachrichtigen, wenn bereit",
   "settings_notifyReachedHint": "Benachrichtigung, wenn die Zieltemperatur erreicht ist und die App im Hintergrund läuft",
   "settings_notifyBattery99": "Bei 99 % Akkustand benachrichtigen",
-  "settings_notifyBattery88": "Zusätzlich bei 88 % benachrichtigen",
   "settings_notifyBatteryHint": "Benachrichtigung, wenn der Akkustand dieses Niveau erreicht und die App im Hintergrund läuft",
   "settings_notifyBlocked": "Benachrichtigungen sind in den Browser-Einstellungen blockiert.",
   "settings_notifyUnsupported": "Dieser Browser unterstützt keine Benachrichtigungen.",
@@ -261,5 +260,16 @@
   "crafty_extensionStop": "Verlängerung stoppen",
   "workflow_newName": "Neuer Workflow",
   "workflow_defaultBalloon": "Ballon",
-  "workflow_defaultName": "Workflow {number}"
+  "workflow_defaultName": "Workflow {number}",
+  "settings_sectionLowBattery": "Akku-Schutz",
+  "crafty_lowBatteryAppOnly": "Diese Funktionen laufen in der App: Sie benötigen eine aktive Bluetooth-Verbindung und eine laufende App. Die Ausführung im Hintergrund ist Best-Effort und kann bei pausierten mobilen Browsern nicht garantiert werden.",
+  "crafty_lowBatteryThreshold": "Akku-Schwelle",
+  "crafty_lowBatteryWarning": "Warnung per Smartphone-Vibration",
+  "crafty_lowBatteryWarningHint": "Vibriert dieses Smartphone. Das ist nicht die Gerätevibration des Crafty+.",
+  "crafty_lowBatteryShutdown": "Automatische Heizungsabschaltung",
+  "crafty_lowBatteryShutdownHint": "Schaltet die Heizung aus, wenn der Akku die Schwelle erreicht.",
+  "crafty_lowBatteryWarningMessage": "Akku bei {percentage} % oder darunter. Warnung per Smartphone-Vibration.",
+  "crafty_lowBatteryShutdownDone": "Akku schwach: Heizung automatisch ausgeschaltet.",
+  "crafty_lowBatteryShutdownFailed": "Akku schwach, aber die Heizung konnte nicht ausgeschaltet werden. Bitte prüfe das Gerät.",
+  "crafty_lowBatteryVerificationFailed": "Akkuwarnung: Der Gerätestatus konnte nicht bestätigt werden. Es wurde keine automatische Aktion ausgeführt."
 }

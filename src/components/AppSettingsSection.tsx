@@ -12,11 +12,9 @@ import {
   setHistoryRetentionDays,
 } from "../utils/historyRetention";
 import {
-  getBatteryNotifyPreference,
   getNotifyPreference,
   getSoundPreference,
   isNotificationSupported,
-  setBatteryNotifyPreference,
   setNotifyPreference,
   setSoundPreference,
 } from "../utils/notify";
@@ -34,9 +32,6 @@ export const AppSettingsSection = () => {
   const showToast = useToast();
   const effects = useEffects();
   const [notify, setNotify] = createSignal(getNotifyPreference());
-  const [notifyBattery88, setNotifyBattery88] = createSignal(
-    getBatteryNotifyPreference(88)
-  );
   const [sound, setSound] = createSignal(getSoundPreference());
   const [retentionInput, setRetentionInput] = createSignal(
     String(getHistoryRetentionDays())
@@ -45,14 +40,6 @@ export const AppSettingsSection = () => {
   const toggleNotify = async (enabled: boolean) => {
     const effective = await setNotifyPreference(enabled);
     setNotify(effective);
-    if (enabled && !effective) {
-      showToast({ message: m.settings_notifyBlocked() });
-    }
-  };
-
-  const toggleBatteryNotify88 = async (enabled: boolean) => {
-    const effective = await setBatteryNotifyPreference(88, enabled);
-    setNotifyBattery88(effective);
     if (enabled && !effective) {
       showToast({ message: m.settings_notifyBlocked() });
     }
@@ -110,17 +97,6 @@ export const AppSettingsSection = () => {
         checked={notify()}
         disabled={!isNotificationSupported()}
         onChange={toggleNotify}
-      />
-      <SettingSwitch
-        label={m.settings_notifyBattery88()}
-        description={
-          isNotificationSupported()
-            ? m.settings_notifyBatteryHint()
-            : m.settings_notifyUnsupported()
-        }
-        checked={notifyBattery88()}
-        disabled={!isNotificationSupported()}
-        onChange={toggleBatteryNotify88}
       />
       <SettingSwitch
         label={m.settings_sound()}

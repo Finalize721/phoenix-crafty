@@ -192,7 +192,6 @@
   "settings_notifyReached": "Notify when ready",
   "settings_notifyReachedHint": "Notification when the target temperature is reached while the app is in the background",
   "settings_notifyBattery99": "Notify at 99% battery",
-  "settings_notifyBattery88": "Also notify at 88% battery",
   "settings_notifyBatteryHint": "Notification when the battery reaches this level while the app is in the background",
   "settings_notifyBlocked": "Notifications are blocked in the browser settings.",
   "settings_notifyUnsupported": "This browser does not support notifications.",
@@ -261,5 +260,16 @@
   "crafty_extensionStop": "Stop extension",
   "workflow_newName": "New workflow",
   "workflow_defaultBalloon": "Balloon",
-  "workflow_defaultName": "Workflow {number}"
+  "workflow_defaultName": "Workflow {number}",
+  "settings_sectionLowBattery": "Low battery protection",
+  "crafty_lowBatteryAppOnly": "These are app-side features: they need an active Bluetooth connection and the running app. Background execution is best-effort and cannot be guaranteed on suspended mobile browsers.",
+  "crafty_lowBatteryThreshold": "Battery threshold",
+  "crafty_lowBatteryWarning": "Smartphone vibration warning",
+  "crafty_lowBatteryWarningHint": "Vibrates this smartphone. This is not the Crafty+ device vibration.",
+  "crafty_lowBatteryShutdown": "Automatic heater shutdown",
+  "crafty_lowBatteryShutdownHint": "Switches the heater off when the battery reaches the threshold.",
+  "crafty_lowBatteryWarningMessage": "Battery at {percentage}% or below. Warning via smartphone vibration.",
+  "crafty_lowBatteryShutdownDone": "Battery low: heater switched off automatically.",
+  "crafty_lowBatteryShutdownFailed": "Battery low, but the heater could not be switched off. Please check the device.",
+  "crafty_lowBatteryVerificationFailed": "Battery warning: the device state could not be confirmed. No automatic action was taken."
 }

@@ -240,6 +240,19 @@ describe("Crafty driver", () => {
     for (const read of reads) expect(read).toHaveBeenCalledOnce();
   });
 
+  it("re-reads battery and registers for live verification", async () => {
+    const { driver, characteristics } = await collect();
+    const reads = [
+      UUID.powerChanged,
+      UUID.handleProjectRegister,
+      UUID.statusRegister2,
+    ].map((uuid) =>
+      vi.spyOn(characteristicOf(characteristics, uuid), "readValue")
+    );
+    await driver.refreshLiveState();
+    for (const read of reads) expect(read).toHaveBeenCalledOnce();
+  });
+
   it("enables notifications for the changing values", async () => {
     const { characteristics } = await collect();
     const notifying = [...characteristics.values()]

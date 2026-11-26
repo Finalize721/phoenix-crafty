@@ -2,7 +2,6 @@
 const NOTIFY_KEY = "notifyTargetReached";
 const SOUND_KEY = "soundTargetReached";
 const BATTERY_NOTIFY_KEYS = {
-  88: "notifyBattery88",
   99: "notifyBattery99",
 } as const;
 
@@ -68,7 +67,7 @@ export const setBatteryNotifyPreference = async (
 };
 
 export const crossedBatteryThresholds = (previous: number, current: number) =>
-  ([88, 99] as const).filter(
+  ([99] as const).filter(
     (threshold) => previous < threshold && current >= threshold
   );
 

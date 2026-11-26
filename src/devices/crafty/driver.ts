@@ -128,11 +128,13 @@ const DIAGNOSTICS: (keyof Characteristics)[] = [
 const FACTORY_RESET_SETTLE_MS = 1000;
 
 // Values that can become stale if browser/Android pauses GATT notifications.
+// The low-battery protection also verifies heater and setpoint state.
 const LIVE_STATE: (keyof Characteristics)[] = [
   "targetTemp",
   "currentTemp",
   "battery",
   "projectRegister",
+  "statusRegister2",
 ];
 
 export interface CraftyInfo {
@@ -161,7 +163,7 @@ export interface CraftyDriver {
   factoryReset(): Promise<void>;
   /** Re-reads the registers the analysis looks at */
   readDiagnostics(): Promise<void>;
-  /** Reconciles on-screen telemetry after background/resume. */
+  /** Re-reads telemetry, battery and heater state after resume or before acting. */
   refreshLiveState(): Promise<void>;
   dispose(): Promise<void>;
 }
