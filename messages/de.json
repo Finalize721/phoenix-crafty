@@ -269,7 +269,7 @@
   "crafty_lowBatteryAppOnly": "Diese Funktionen laufen in der App: Sie benötigen eine aktive Bluetooth-Verbindung und eine laufende App. Die Ausführung im Hintergrund ist Best-Effort und kann bei pausierten mobilen Browsern nicht garantiert werden.",
   "crafty_lowBatteryThreshold": "Akku-Schwelle",
   "crafty_lowBatteryWarning": "Crafty+-Gerätewarnung (experimentell)",
-  "crafty_lowBatteryWarningHint": "Fordert einmal das Ortungssignal des Crafty+ an (Vibration und Blinken, bis zu 30 Sekunden). Keine Smartphone-Vibration. Das genaue Muster und Verhalten beim Heizen hängen von der Firmware ab.",
+  "crafty_lowBatteryWarningHint": "Fordert einmal das Ortungssignal des Crafty+ an (Vibration und Blinken, bis zu 30 Sekunden). Keine Smartphone-Vibration. Das Muster ist firmwareabhängig. Das Signal ist während des Heizens ungetestet und kann die Heizsession unterbrechen.",
   "crafty_lowBatteryShutdown": "Automatische Heizungsabschaltung",
   "crafty_lowBatteryShutdownHint": "Schaltet die Heizung aus, sobald der Akku die Schwelle unterschreitet oder erreicht und die Zieltemperatur einmal erreicht wurde.",
   "crafty_lowBatteryWarningMessage": "Akku bei {percentage} %. Ortungssignal am Crafty+ angefordert.",
