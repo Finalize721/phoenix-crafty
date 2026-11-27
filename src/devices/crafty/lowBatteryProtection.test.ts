@@ -358,14 +358,16 @@ describe("low-battery protection", () => {
   });
 
   it("rearms a lower threshold after an earlier warning in the same session", async () => {
-    const h = setup({ threshold: 45, shutdownEnabled: false });
+    const h = setup({ threshold: 42, shutdownEnabled: false });
     h.startSession();
+    h.reading(43);
     h.reading(42);
     await h.settle();
     expect(h.io.warnDevice).toHaveBeenCalledOnce();
-    h.setSettings({ threshold: 35, shutdownEnabled: true });
+    h.setSettings({ threshold: 30, shutdownEnabled: true });
     await h.settle();
     expect(h.io.heaterOff).not.toHaveBeenCalled();
+    h.reading(31);
     h.reading(30);
     await h.settle();
     expect(h.io.heaterOff).toHaveBeenCalledOnce();
