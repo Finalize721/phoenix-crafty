@@ -288,5 +288,10 @@
   "crafty_extensionResetConfirmed": "Timer-Reset bestätigt. Verlängerung noch {seconds} s.",
   "crafty_extensionReadFailed": "Timer konnte nicht bestätigt werden. Verlängerung gestoppt.",
   "crafty_extensionStarted": "Versuch für {minutes} Minuten aktiv. Erster Timer-Test in 30 Sekunden.",
-  "crafty_extensionBackground": "App im Hintergrund. Verlängerung gestoppt; Gerätetimer läuft weiter."
+  "crafty_extensionBackground": "App im Hintergrund. Verlängerung gestoppt; Gerätetimer läuft weiter.",
+  "settings_colorRed": "Rot",
+  "settings_colorGreen": "Grün",
+  "settings_colorBlue": "Blau",
+  "settings_colorHex": "Hex-Farbe",
+  "settings_darkBaseColorHint": "Im Dunkelmodus wird die Grundfarbe abgedunkelt. Die Vorschau zeigt die resultierende Hintergrundfarbe."
 }
