@@ -411,16 +411,6 @@
   padding: 8px;
   color: var(--foreground);
 }
-.palette-field input[type="color"] {
-  width: 48px;
-  height: 38px;
-  flex: 0 0 48px;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--card);
-  cursor: pointer;
-}
 .palette-reset {
   width: 100%;
   min-height: 42px;
