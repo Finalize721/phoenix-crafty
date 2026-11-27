@@ -117,8 +117,13 @@
   "analysis_finding_boostTimeoutDisabled": "Boost & Superboost timeout is disabled.",
   "workflow_stepCount": [
     {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
       "match": {
         "countPlural=one": "{count} step",
         "countPlural=other": "{count} steps"
@@ -263,11 +268,11 @@
   "settings_sectionLowBattery": "Low battery protection",
   "crafty_lowBatteryAppOnly": "These are app-side features: they need an active Bluetooth connection and the running app. Background execution is best-effort and cannot be guaranteed on suspended mobile browsers.",
   "crafty_lowBatteryThreshold": "Battery threshold",
-  "crafty_lowBatteryWarning": "Smartphone vibration warning",
-  "crafty_lowBatteryWarningHint": "Vibrates this smartphone. This is not the Crafty+ device vibration.",
+  "crafty_lowBatteryWarning": "Crafty+ device warning (experimental)",
+  "crafty_lowBatteryWarningHint": "Requests the Crafty+ locate signal once (vibration and flashing, up to 30 seconds). No phone vibration. The pattern is firmware-controlled; the signal is untested during heating and may interrupt it.",
   "crafty_lowBatteryShutdown": "Automatic heater shutdown",
-  "crafty_lowBatteryShutdownHint": "Switches the heater off when the battery reaches the threshold.",
-  "crafty_lowBatteryWarningMessage": "Battery at {percentage}% or below. Warning via smartphone vibration.",
+  "crafty_lowBatteryShutdownHint": "Switches the heater off when the battery crosses the threshold after the target temperature has been reached once.",
+  "crafty_lowBatteryWarningMessage": "Battery at {percentage}%. Crafty+ locate signal requested.",
   "crafty_lowBatteryShutdownDone": "Battery low: heater switched off automatically.",
   "crafty_lowBatteryShutdownFailed": "Battery low, but the heater could not be switched off. Please check the device.",
   "crafty_lowBatteryVerificationFailed": "Battery warning: the device state could not be confirmed. No automatic action was taken.",
@@ -293,5 +298,11 @@
   "settings_colorGreen": "Green",
   "settings_colorBlue": "Blue",
   "settings_colorHex": "Hex color",
-  "settings_darkBaseColorHint": "Dark mode dims the base color. The preview shows the resulting background."
+  "settings_darkBaseColorHint": "Dark mode dims the base color. The preview shows the resulting background.",
+  "crafty_lowBatteryDeviceWarningFailed": "Battery low: the Crafty+ warning signal could not be confirmed.",
+  "settings_colorVisual": "Color field",
+  "settings_colorRgb": "RGB",
+  "settings_colorHue": "Hue",
+  "settings_colorSaturation": "Saturation",
+  "settings_colorValue": "Brightness"
 }

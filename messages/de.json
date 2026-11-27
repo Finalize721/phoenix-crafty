@@ -117,8 +117,13 @@
   "analysis_finding_boostTimeoutDisabled": "Boost- & Superboost-Timeout ist deaktiviert.",
   "workflow_stepCount": [
     {
-      "declarations": ["input count", "local countPlural = count: plural"],
-      "selectors": ["countPlural"],
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
       "match": {
         "countPlural=one": "{count} Schritt",
         "countPlural=other": "{count} Schritte"
@@ -263,11 +268,11 @@
   "settings_sectionLowBattery": "Akku-Schutz",
   "crafty_lowBatteryAppOnly": "Diese Funktionen laufen in der App: Sie benötigen eine aktive Bluetooth-Verbindung und eine laufende App. Die Ausführung im Hintergrund ist Best-Effort und kann bei pausierten mobilen Browsern nicht garantiert werden.",
   "crafty_lowBatteryThreshold": "Akku-Schwelle",
-  "crafty_lowBatteryWarning": "Warnung per Smartphone-Vibration",
-  "crafty_lowBatteryWarningHint": "Vibriert dieses Smartphone. Das ist nicht die Gerätevibration des Crafty+.",
+  "crafty_lowBatteryWarning": "Crafty+-Gerätewarnung (experimentell)",
+  "crafty_lowBatteryWarningHint": "Fordert einmal das Ortungssignal des Crafty+ an (Vibration und Blinken, bis zu 30 Sekunden). Keine Smartphone-Vibration. Das Muster ist firmwareabhängig. Das Signal ist während des Heizens ungetestet und kann die Heizsession unterbrechen.",
   "crafty_lowBatteryShutdown": "Automatische Heizungsabschaltung",
-  "crafty_lowBatteryShutdownHint": "Schaltet die Heizung aus, wenn der Akku die Schwelle erreicht.",
-  "crafty_lowBatteryWarningMessage": "Akku bei {percentage} % oder darunter. Warnung per Smartphone-Vibration.",
+  "crafty_lowBatteryShutdownHint": "Schaltet die Heizung aus, sobald der Akku die Schwelle unterschreitet oder erreicht und die Zieltemperatur einmal erreicht wurde.",
+  "crafty_lowBatteryWarningMessage": "Akku bei {percentage} %. Ortungssignal am Crafty+ angefordert.",
   "crafty_lowBatteryShutdownDone": "Akku schwach: Heizung automatisch ausgeschaltet.",
   "crafty_lowBatteryShutdownFailed": "Akku schwach, aber die Heizung konnte nicht ausgeschaltet werden. Bitte prüfe das Gerät.",
   "crafty_lowBatteryVerificationFailed": "Akkuwarnung: Der Gerätestatus konnte nicht bestätigt werden. Es wurde keine automatische Aktion ausgeführt.",
@@ -293,5 +298,11 @@
   "settings_colorGreen": "Grün",
   "settings_colorBlue": "Blau",
   "settings_colorHex": "Hex-Farbe",
-  "settings_darkBaseColorHint": "Im Dunkelmodus wird die Grundfarbe abgedunkelt. Die Vorschau zeigt die resultierende Hintergrundfarbe."
+  "settings_darkBaseColorHint": "Im Dunkelmodus wird die Grundfarbe abgedunkelt. Die Vorschau zeigt die resultierende Hintergrundfarbe.",
+  "crafty_lowBatteryDeviceWarningFailed": "Akku schwach: Das Warnsignal am Crafty+ konnte nicht bestätigt werden.",
+  "settings_colorVisual": "Farbfeld",
+  "settings_colorRgb": "RGB",
+  "settings_colorHue": "Farbton",
+  "settings_colorSaturation": "Sättigung",
+  "settings_colorValue": "Helligkeit"
 }

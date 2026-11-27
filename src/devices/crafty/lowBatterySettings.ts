@@ -27,12 +27,13 @@ export const isValidLowBatteryThreshold = (value: unknown): value is number =>
 const parseSettings = (raw: string | null): LowBatterySettings => {
   if (!raw) return { ...DEFAULT_LOW_BATTERY_SETTINGS };
   try {
-    const parsed = JSON.parse(raw) as Partial<LowBatterySettings>;
+    const parsed = JSON.parse(raw) as Partial<LowBatterySettings> & { deviceWarning?: boolean };
     return {
       threshold: isValidLowBatteryThreshold(parsed.threshold)
         ? parsed.threshold
         : DEFAULT_LOW_BATTERY_SETTINGS.threshold,
-      warningEnabled: parsed.warningEnabled === true,
+      // Do not silently convert an old phone-vibration opt-in to a hardware command.
+      warningEnabled: parsed.deviceWarning === true && parsed.warningEnabled === true,
       shutdownEnabled: parsed.shutdownEnabled === true,
     };
   } catch {
@@ -57,7 +58,7 @@ export const getLowBatterySettings = settings;
 const persist = (next: LowBatterySettings) => {
   setSettings(next);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...next, deviceWarning: true }));
   } catch {
     // Keep the preference for this session if storage is unavailable.
   }
