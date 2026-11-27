@@ -33,7 +33,7 @@ const setup = (overrides: Partial<LowBatterySettings> = {}) => {
     heaterOff: vi.fn(async () => {
       heaterActive = false;
     }),
-    vibrate: vi.fn(),
+    warnDevice: vi.fn(async () => {}),
     reportWarning: vi.fn(),
     reportShutdown: vi.fn(),
     reportError: vi.fn(),
@@ -108,7 +108,7 @@ describe("low-battery protection", () => {
 
     await h.settle();
 
-    expect(h.io.vibrate).toHaveBeenCalledOnce();
+    expect(h.io.warnDevice).toHaveBeenCalledOnce();
     expect(h.io.reportWarning).toHaveBeenCalledWith({
       level: 10,
       threshold: 15,
@@ -160,10 +160,10 @@ describe("low-battery protection", () => {
     expect(h.io.heaterOff).not.toHaveBeenCalled();
   });
 
-  it("ignores initial and reconnect snapshots", async () => {
+  it("ignores initial snapshots already below the threshold", async () => {
     const h = setup();
+    h.setBatterySnapshot(10);
     h.startSession();
-    h.reading(10, "snapshot");
     h.reading(9);
 
     await h.settle();
@@ -197,7 +197,7 @@ describe("low-battery protection", () => {
     await h.settle();
 
     expect(h.io.reportWarning).toHaveBeenCalledOnce();
-    expect(h.io.vibrate).toHaveBeenCalledOnce();
+    expect(h.io.warnDevice).toHaveBeenCalledOnce();
   });
 
   it("allows an intentional manual restart below the threshold", async () => {
@@ -221,7 +221,7 @@ describe("low-battery protection", () => {
     warningOnly.startSession();
     warningOnly.reading(10);
     await warningOnly.settle();
-    expect(warningOnly.io.vibrate).toHaveBeenCalledOnce();
+    expect(warningOnly.io.warnDevice).toHaveBeenCalledOnce();
     expect(warningOnly.io.reportWarning).toHaveBeenCalledOnce();
     expect(warningOnly.io.heaterOff).not.toHaveBeenCalled();
 
@@ -229,7 +229,7 @@ describe("low-battery protection", () => {
     shutdownOnly.startSession();
     shutdownOnly.reading(10);
     await shutdownOnly.settle();
-    expect(shutdownOnly.io.vibrate).not.toHaveBeenCalled();
+    expect(shutdownOnly.io.warnDevice).not.toHaveBeenCalled();
     expect(shutdownOnly.io.reportWarning).not.toHaveBeenCalled();
     expect(shutdownOnly.io.heaterOff).toHaveBeenCalledOnce();
     expect(shutdownOnly.io.reportShutdown).toHaveBeenCalledOnce();
@@ -248,7 +248,7 @@ describe("low-battery protection", () => {
     neither.startSession();
     neither.reading(10);
     await neither.settle();
-    expect(neither.io.vibrate).not.toHaveBeenCalled();
+    expect(neither.io.warnDevice).not.toHaveBeenCalled();
     expect(neither.io.reportWarning).not.toHaveBeenCalled();
     expect(neither.io.heaterOff).not.toHaveBeenCalled();
   });
@@ -333,9 +333,9 @@ describe("low-battery protection", () => {
     expect(confirmationFailure.io.reportShutdown).not.toHaveBeenCalled();
   });
 
-  it("still shuts down when smartphone vibration is unavailable", async () => {
+  it("still shuts down when the device warning fails", async () => {
     const h = setup();
-    h.io.vibrate.mockImplementation(() => {
+    h.io.warnDevice.mockImplementation(async () => {
       throw new Error("not supported");
     });
     h.startSession();
@@ -343,7 +343,48 @@ describe("low-battery protection", () => {
 
     await h.settle();
 
-    expect(h.io.reportWarning).toHaveBeenCalledOnce();
+    expect(h.io.reportError).toHaveBeenCalledWith("warning");
     expect(h.io.heaterOff).toHaveBeenCalledOnce();
+  });
+
+  it("detects a skipped threshold from a live snapshot after reaching temperature", async () => {
+    const h = setup({ threshold: 35 });
+    h.startSession();
+    h.reading(42);
+    h.setSetpoint(false);
+    h.reading(30, "snapshot");
+    await h.settle();
+    expect(h.io.heaterOff).toHaveBeenCalledOnce();
+  });
+
+  it("rearms a lower threshold after an earlier warning in the same session", async () => {
+    const h = setup({ threshold: 45, shutdownEnabled: false });
+    h.startSession();
+    h.reading(42);
+    await h.settle();
+    expect(h.io.warnDevice).toHaveBeenCalledOnce();
+    h.setSettings({ threshold: 35, shutdownEnabled: true });
+    await h.settle();
+    expect(h.io.heaterOff).not.toHaveBeenCalled();
+    h.reading(30);
+    await h.settle();
+    expect(h.io.heaterOff).toHaveBeenCalledOnce();
+  });
+
+  it("retries failed verification only on subsequent readings, at most three times", async () => {
+    const h = setup({ threshold: 35 });
+    h.io.refreshLiveState.mockRejectedValue(new Error("read"));
+    h.startSession();
+    h.reading(30);
+    await h.settle();
+    h.protection.update();
+    await h.settle();
+    expect(h.io.refreshLiveState).toHaveBeenCalledTimes(1);
+    for (const level of [29, 28, 27, 26]) {
+      h.reading(level);
+      await h.settle();
+    }
+    expect(h.io.refreshLiveState).toHaveBeenCalledTimes(3);
+    expect(h.io.heaterOff).not.toHaveBeenCalled();
   });
 });
