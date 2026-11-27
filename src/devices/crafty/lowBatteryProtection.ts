@@ -1,7 +1,7 @@
 import type { CraftyUpdateOrigin } from "./driver";
 import type { LowBatterySettings } from "./lowBatterySettings";
 
-export type LowBatteryErrorReason = "verification" | "command" | "confirmation";
+export type LowBatteryErrorReason = "verification" | "warning" | "command" | "confirmation";
 
 export interface LowBatteryProtectionIo {
   isLoaded: () => boolean;
@@ -14,183 +14,173 @@ export interface LowBatteryProtectionIo {
   };
   isHeaterActive: () => boolean;
   isSetpointReached: () => boolean;
-  /** Fresh GATT reads of battery, project register and status register 2 */
   refreshLiveState: () => Promise<void>;
   stopSessionExtension: () => void;
   heaterOff: () => Promise<void>;
-  vibrate?: () => void;
+  /** Request the existing Crafty+ locate signal, not phone vibration. */
+  warnDevice: () => Promise<void>;
   reportWarning?: (details: { level: number; threshold: number }) => void;
   reportShutdown?: () => void;
   reportError?: (reason: LowBatteryErrorReason) => void;
 }
 
-const vibratePhone = () => {
-  try {
-    navigator.vibrate?.([200, 150, 200, 150, 200]);
-  } catch {
-    // Vibration is optional; automatic shutdown must still work.
-  }
-};
+const validLevel = (level: number) =>
+  Number.isInteger(level) && level >= 0 && level <= 100;
 
-/**
- * Watches battery readings during a heating session. It only acts on a
- * downward threshold crossing reported by a BLE notification, never on the
- * initial snapshot, a reconnect snapshot, a setting change or a duplicate
- * reading.
+/** One action per threshold per heating session; a changed threshold rearms
+ * from the current level. A live read during a known session may detect a
+ * crossing missed by notifications. Initial/reconnect readings are baselines.
+ * Reaching the setpoint once latches readiness until the heater turns off.
  */
 export const createLowBatteryProtection = (io: LowBatteryProtectionIo) => {
   let lastReadingId = -1;
   let previousLevel: number | undefined;
-  let wasHeaterActive = false;
-  let lastSetpointReached = false;
-  let sessionHandled = false;
+  let threshold: number | undefined;
+  let active = false;
+  let ready = false;
+  let handled = false;
   let pending = false;
+  let attempts = 0;
   let busy = false;
   let disposed = false;
-  let sessionId = 0;
+  let generation = 0;
 
-  const finishSession = () => {
-    wasHeaterActive = false;
-    lastSetpointReached = false;
-    sessionHandled = false;
+  const reset = () => {
+    generation++;
+    ready = false;
+    handled = false;
     pending = false;
+    attempts = 0;
+  };
+  const stillCurrent = (token: number, limit: number) =>
+    !disposed && token === generation && io.isLoaded() &&
+    io.isCraftyPlus() && io.isHeaterActive() &&
+    io.getSettings().threshold === limit;
+  const reportError = (reason: LowBatteryErrorReason) => {
+    try { io.reportError?.(reason); } catch { /* UI reporting is best effort. */ }
   };
 
-  const execute = async (actionSessionId: number) => {
-    if (busy || disposed) return;
+  const execute = async (token: number, limit: number) => {
     busy = true;
+    pending = false;
+    attempts++;
     try {
       try {
         await io.refreshLiveState();
       } catch {
-        // A failed fresh read is a failed verification: never shut down then.
-        if (!disposed) io.reportError?.("verification");
+        if (stillCurrent(token, limit)) {
+          // A new reading may retry verification, but never loop indefinitely.
+          pending = attempts < 3;
+          reportError("verification");
+        }
         return;
       }
-      if (disposed || actionSessionId !== sessionId) return;
-
-      const settings = io.getSettings();
+      if (!stillCurrent(token, limit)) return;
       const battery = io.getBattery();
-      if (!io.isLoaded() || !io.isCraftyPlus()) return;
-      if (!io.isHeaterActive()) return;
-      if (!io.isSetpointReached()) {
-        // Still heating up. Wait for the setpoint notification.
+      const settings = io.getSettings();
+      if (!validLevel(battery.level) || battery.level > limit) return;
+      if (!settings.warningEnabled && !settings.shutdownEnabled) return;
+      ready ||= io.isSetpointReached();
+      if (!ready) {
         pending = true;
-        lastSetpointReached = false;
         return;
       }
-      if (battery.level > settings.threshold) return;
-      if (!settings.warningEnabled && !settings.shutdownEnabled) return;
 
+      // Consume only a verified crossing, never an unsuccessful fresh read.
+      handled = true;
       if (settings.warningEnabled) {
         try {
-          (io.vibrate ?? vibratePhone)();
+          await io.warnDevice();
+          if (!disposed) io.reportWarning?.({ level: battery.level, threshold: limit });
         } catch {
-          // Unsupported vibration must not prevent automatic shutdown.
-        }
-        try {
-          io.reportWarning?.({
-            level: battery.level,
-            threshold: settings.threshold,
-          });
-        } catch {
-          // The visual warning is best-effort; shutdown still runs.
+          if (!disposed) reportError("warning");
         }
       }
 
-      if (settings.shutdownEnabled) {
-        try {
-          io.stopSessionExtension();
-        } catch {
-          // Stopping the extension is best-effort; shutdown still runs.
-        }
-        try {
-          await io.heaterOff();
-        } catch {
-          if (!disposed) io.reportError?.("command");
-          return;
-        }
-        try {
-          await io.refreshLiveState();
-        } catch {
-          if (!disposed) io.reportError?.("confirmation");
-          return;
-        }
-        if (disposed || actionSessionId !== sessionId) return;
-        if (io.isHeaterActive()) {
-          io.reportError?.("confirmation");
-        } else {
-          io.reportShutdown?.();
-        }
+      // The locate request is independent of shutdown. Never switch on the
+      // heater or act on a different session after an asynchronous request.
+      if (!stillCurrent(token, limit) || !io.getSettings().shutdownEnabled) return;
+      try { io.stopSessionExtension(); } catch { /* still shut down */ }
+      try {
+        await io.heaterOff();
+      } catch {
+        if (!disposed) reportError("command");
+        return;
       }
+      try {
+        await io.refreshLiveState();
+      } catch {
+        if (!disposed) reportError("confirmation");
+        return;
+      }
+      if (disposed || token !== generation) return;
+      if (io.isHeaterActive()) reportError("confirmation");
+      else io.reportShutdown?.();
     } finally {
       busy = false;
     }
   };
 
-  const update = (thresholdOverride?: number) => {
+  const update = () => {
     if (disposed) return;
     const battery = io.getBattery();
-    const reached = io.isSetpointReached();
-    const heaterActive = io.isHeaterActive();
-
-    if (!io.isLoaded() || !io.isCraftyPlus()) {
-      finishSession();
-      lastReadingId = battery.readingId;
-      previousLevel = battery.level;
-      lastSetpointReached = reached;
-      return;
-    }
+    const settings = io.getSettings();
+    const heaterActive = io.isLoaded() && io.isCraftyPlus() && io.isHeaterActive();
+    const newReading = battery.readingId !== lastReadingId;
+    lastReadingId = battery.readingId;
 
     if (!heaterActive) {
-      if (wasHeaterActive) finishSession();
-      if (battery.readingId !== lastReadingId) {
-        lastReadingId = battery.readingId;
-        previousLevel = battery.level;
+      if (active) {
+        // Preserve the generation for confirmation of our own heater-off.
+        ready = false;
+        handled = false;
+        pending = false;
+        attempts = 0;
       }
-      lastSetpointReached = reached;
+      active = false;
+      threshold = settings.threshold;
+      previousLevel = validLevel(battery.level) ? battery.level : undefined;
       return;
     }
 
-    if (!wasHeaterActive) {
-      // New heating session: remember the current level as the baseline, so
-      // a restart below the threshold does not look like a crossing.
-      wasHeaterActive = true;
-      sessionId++;
-      sessionHandled = false;
-      pending = false;
-      lastReadingId = battery.readingId;
-      previousLevel = battery.level;
-      lastSetpointReached = reached;
+    if (!active) {
+      reset();
+      active = true;
+      threshold = settings.threshold;
+      previousLevel = validLevel(battery.level) ? battery.level : undefined;
+      ready = io.isSetpointReached();
       return;
     }
 
-    let run = false;
-    if (battery.readingId !== lastReadingId) {
-      lastReadingId = battery.readingId;
-      const threshold = thresholdOverride ?? io.getSettings().threshold;
-      if (
-        battery.origin === "notification" &&
-        previousLevel !== undefined &&
-        !sessionHandled &&
-        previousLevel > threshold &&
-        battery.level <= threshold
-      ) {
-        sessionHandled = true;
-        if (reached) run = true;
-        else pending = true;
+    const becameReady = !ready && io.isSetpointReached();
+    ready ||= becameReady;
+    if (threshold !== settings.threshold) {
+      generation++;
+      threshold = settings.threshold;
+      handled = false;
+      pending = false;
+      attempts = 0;
+      // Changing a setting alone must not trigger the heater command.
+      previousLevel = validLevel(battery.level) ? battery.level : undefined;
+      return;
+    }
+    const enabled = settings.warningEnabled || settings.shutdownEnabled;
+    if (!enabled) pending = false;
+    if (newReading && validLevel(battery.level)) {
+      if (battery.level > settings.threshold) {
+        pending = false;
+        if (!handled) attempts = 0;
+      }
+      if (enabled && !handled && !busy && previousLevel !== undefined &&
+          previousLevel > settings.threshold && battery.level <= settings.threshold) {
+        pending = true;
+        attempts = 0;
       }
       previousLevel = battery.level;
     }
-
-    if (pending && reached && !lastSetpointReached) {
-      pending = false;
-      run = true;
-    }
-    lastSetpointReached = reached;
-
-    if (run && !busy) {
-      void execute(sessionId);
+    if (enabled && pending && !handled && !busy && ready &&
+        attempts < 3 && (newReading || becameReady)) {
+      void execute(generation, settings.threshold);
     }
   };
 
@@ -199,6 +189,7 @@ export const createLowBatteryProtection = (io: LowBatteryProtectionIo) => {
     dispose() {
       disposed = true;
       pending = false;
+      generation++;
     },
   };
 };
