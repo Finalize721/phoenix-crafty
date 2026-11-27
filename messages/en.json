@@ -269,7 +269,7 @@
   "crafty_lowBatteryAppOnly": "These are app-side features: they need an active Bluetooth connection and the running app. Background execution is best-effort and cannot be guaranteed on suspended mobile browsers.",
   "crafty_lowBatteryThreshold": "Battery threshold",
   "crafty_lowBatteryWarning": "Crafty+ device warning (experimental)",
-  "crafty_lowBatteryWarningHint": "Requests the Crafty+ locate signal once (vibration and flashing, up to 30 seconds). No phone vibration. The exact pattern and behavior while heating depend on firmware.",
+  "crafty_lowBatteryWarningHint": "Requests the Crafty+ locate signal once (vibration and flashing, up to 30 seconds). No phone vibration. The pattern is firmware-controlled; the signal is untested during heating and may interrupt it.",
   "crafty_lowBatteryShutdown": "Automatic heater shutdown",
   "crafty_lowBatteryShutdownHint": "Switches the heater off when the battery crosses the threshold after the target temperature has been reached once.",
   "crafty_lowBatteryWarningMessage": "Battery at {percentage}%. Crafty+ locate signal requested.",
