@@ -1,3 +1,5 @@
+import ChevronRight from "lucide-solid/icons/chevron-right";
+import MapPin from "lucide-solid/icons/map-pin";
 import Download from "lucide-solid/icons/download";
 import TriangleAlert from "lucide-solid/icons/triangle-alert";
 import { type Component, createSignal, Show } from "solid-js";
@@ -70,6 +72,27 @@ export const CraftySettingsView: Component = () => {
           <TriangleAlert />
           <AlertDescription>{m.crafty_oldDetected()}</AlertDescription>
         </Alert>
+      </Show>
+
+      {/* Find My Device - only Crafty+ */}
+      <Show when={isCraftyPlus}>
+        <button
+          type="button"
+          disabled={derived.isFindMyActive()}
+          onClick={actions.findMyDevice}
+          class="flex items-center gap-3 rounded-2xl border bg-card px-4 py-3.5 text-left transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 disabled:opacity-60"
+        >
+          <MapPin class="size-[18px] text-muted-foreground" />
+          <span class="flex flex-1 flex-col gap-0.5">
+            <span class="font-medium text-sm">{m.settings_findMyDevice()}</span>
+            <Show when={derived.isFindMyActive()}>
+              <span class="text-primary text-xs">
+                {m.settings_findMyDeviceRunning()}
+              </span>
+            </Show>
+          </span>
+          <ChevronRight class="size-4 text-muted-foreground" />
+        </button>
       </Show>
 
       <SettingsSection title={m.settings_sectionDevice()}>
