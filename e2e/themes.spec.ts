@@ -162,3 +162,25 @@ test("dark preset starts from its dark accent and preserves its base appearance 
   await expect(palette.getByRole("textbox", { name: "Hex color" })).toHaveValue("#20396d");
   await expect(page.locator("html")).toHaveCSS("--custom-base", "#20396d");
 });
+
+test("visual and RGB methods edit the same color without resetting it", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Customize appearance" }).click();
+  const palette = page.locator(".palette-popover");
+  await palette.getByRole("button", { name: "Accent color", exact: true }).click();
+  const hex = palette.getByRole("textbox", { name: "Hex color" });
+  await hex.fill("#ff0000");
+  await hex.press("Tab");
+  await palette.getByRole("button", { name: "Color field", exact: true }).click();
+  await expect(hex).toHaveValue("#ff0000");
+  await expect(palette.getByRole("slider", { name: "Hue", exact: true })).toHaveValue("0");
+  await expect(palette.getByRole("slider", { name: "Saturation", exact: true })).toHaveValue("100");
+  await expect(palette.getByRole("slider", { name: "Brightness", exact: true })).toHaveValue("100");
+  await palette.getByRole("slider", { name: "Hue", exact: true }).fill("120");
+  await expect(hex).toHaveValue("#00ff00");
+  await palette.getByRole("button", { name: "RGB", exact: true }).click();
+  await expect(palette.getByRole("slider", { name: "Red", exact: true })).toHaveValue("0");
+  await expect(palette.getByRole("slider", { name: "Green", exact: true })).toHaveValue("255");
+  await expect(palette.getByRole("slider", { name: "Blue", exact: true })).toHaveValue("0");
+});
