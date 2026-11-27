@@ -1,6 +1,4 @@
 import { type RouteSectionProps, useNavigate } from "@solidjs/router";
-import ChevronRight from "lucide-solid/icons/chevron-right";
-import MapPin from "lucide-solid/icons/map-pin";
 import History from "lucide-solid/icons/rotate-ccw-clock";
 import SlidersHorizontal from "lucide-solid/icons/sliders-horizontal";
 import Thermometer from "lucide-solid/icons/thermometer";
@@ -54,8 +52,6 @@ import { ConnectionState } from "../utils/uuids";
 
 export const CraftyView: Component = () => {
   const {
-    actions,
-    derived,
     isCraftyPlus,
     state,
     extension,
@@ -133,26 +129,6 @@ export const CraftyView: Component = () => {
             </p>
           </Show>
         </section>
-      </Show>
-      {/* Find My Device - only Crafty+ */}
-      <Show when={isCraftyPlus}>
-        <button
-          type="button"
-          disabled={derived.isFindMyActive()}
-          onClick={actions.findMyDevice}
-          class="flex items-center gap-3 rounded-2xl border bg-card px-4 py-3.5 text-left transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 disabled:opacity-60"
-        >
-          <MapPin class="size-[18px] text-muted-foreground" />
-          <span class="flex flex-1 flex-col gap-0.5">
-            <span class="font-medium text-sm">{m.settings_findMyDevice()}</span>
-            <Show when={derived.isFindMyActive()}>
-              <span class="text-primary text-xs">
-                {m.settings_findMyDeviceRunning()}
-              </span>
-            </Show>
-          </span>
-          <ChevronRight class="size-4 text-muted-foreground" />
-        </button>
       </Show>
     </>
   );
