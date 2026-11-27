@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { createEffect, createSignal, onCleanup } from "solid-js";
 import { createStore } from "solid-js/store";
 import { m } from "../../paraglide/messages";
 import type { AnalysisResult } from "../shared/analysis";
@@ -313,13 +313,20 @@ export const createCraftyStore = (
       if (extension().active) session.stop();
     },
     heaterOff: () => driver.heaterOff(),
+    warnDevice: async () => {
+      if (derived.isFindMyActive()) return;
+      await driver.setStatusRegister2(
+        withBit(state.statusRegister2, StatusRegister2Bit.FIND_DEVICE, true)
+      );
+      if (!derived.isFindMyActive()) throw new Error("Locate signal not confirmed");
+    },
     reportWarning: lowBatteryNotifications?.onWarning,
     reportShutdown: lowBatteryNotifications?.onShutdown,
     reportError: lowBatteryNotifications?.onError,
   });
   createEffect(() => {
-    // Settings are read untracked: changing them must not look like a reading.
-    lowBattery.update(untrack(getLowBatterySettings).threshold);
+    // The controller distinguishes settings changes from actual new readings.
+    lowBattery.update();
   });
   onCleanup(() => lowBattery.dispose());
 
