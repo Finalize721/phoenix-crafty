@@ -49,6 +49,7 @@ describe("low-battery settings", () => {
         threshold: 20,
         warningEnabled: true,
         shutdownEnabled: true,
+        deviceWarning: true,
       }
     );
   });
@@ -73,6 +74,7 @@ describe("low-battery settings", () => {
           threshold: 25,
           warningEnabled: true,
           shutdownEnabled: true,
+          deviceWarning: true,
         }),
       ],
     ]);
@@ -85,6 +87,15 @@ describe("low-battery settings", () => {
       warningEnabled: true,
       shutdownEnabled: true,
     });
+  });
+
+  it("preserves old shutdown preferences without silently enabling the hardware warning", async () => {
+    vi.resetModules();
+    vi.stubGlobal("localStorage", storageMock(new Map([
+      ["craftyLowBatteryProtection", JSON.stringify({ threshold: 35, warningEnabled: true, shutdownEnabled: true })],
+    ])));
+    const module = await import("./lowBatterySettings");
+    expect(module.getLowBatterySettings()).toEqual({ threshold: 35, warningEnabled: false, shutdownEnabled: true });
   });
 
   it("falls back to defaults for invalid stored values", async () => {
