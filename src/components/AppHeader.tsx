@@ -45,7 +45,7 @@ export const ThemeToggle = () => {
     <Button
       variant="outline"
       size="icon"
-      class="text-muted-foreground"
+      class="text-muted-foreground max-[360px]:size-9"
       aria-label={m.settings_darkMode()}
       aria-pressed={isDarkMode()}
       onClick={() => toggleDarkMode(!isDarkMode())}
@@ -70,7 +70,9 @@ export const CaffeineToggle = () => {
       variant="outline"
       size="icon"
       class={
-        getScreenAwakePreference() ? "text-primary" : "text-muted-foreground"
+        getScreenAwakePreference()
+          ? "text-primary max-[360px]:size-9"
+          : "text-muted-foreground max-[360px]:size-9"
       }
       aria-label={m.settings_screenAwake()}
       title={
@@ -137,39 +139,40 @@ export const AppHeader = (props: AppHeaderProps) => {
 
   return (
     <header class="flex flex-col gap-2 pt-[max(1.125rem,env(safe-area-inset-top))] pb-2">
-      <div class="flex min-w-0 items-center gap-2">
-      <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary [&_svg]:size-5">
-        <Switch fallback={<BluetoothOff class="text-muted-foreground" />}>
-          <Match when={isConnecting()}>
-            <LoaderCircle class="animate-spin" />
-          </Match>
-          <Match when={isConnected()}>
-            <Bluetooth />
-          </Match>
-        </Switch>
-      </div>
-      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div class="truncate font-semibold text-base tracking-tight">
-          <Show when={isConnected()} fallback={m.connection_notConnected()}>
-            {deviceName()}
-          </Show>
-        </div>
-        <div class="flex items-center gap-1.5 text-muted-foreground text-xs">
-          <Switch>
-            <Match when={isConnecting()}>{m.connection_connecting()}</Match>
+      <div class="flex min-w-0 items-center gap-1 min-[361px]:gap-2">
+        <div class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary-soft text-primary [&_svg]:size-5">
+          <Switch fallback={<BluetoothOff class="text-muted-foreground" />}>
+            <Match when={isConnecting()}>
+              <LoaderCircle class="animate-spin" />
+            </Match>
             <Match when={isConnected()}>
-              <span class="size-1.5 shrink-0 rounded-full bg-success" />
-              <span class="truncate">{m.connection_connected()}</span>
+              <Bluetooth />
             </Match>
           </Switch>
         </div>
-      </div>
+        <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div class="truncate font-semibold text-base tracking-tight">
+            <Show when={isConnected()} fallback={m.connection_notConnected()}>
+              {deviceName()}
+            </Show>
+          </div>
+          <div class="flex items-center gap-1.5 text-muted-foreground text-xs">
+            <Switch>
+              <Match when={isConnecting()}>{m.connection_connecting()}</Match>
+              <Match when={isConnected()}>
+                <span class="size-1.5 shrink-0 rounded-full bg-success" />
+                <span class="truncate">{m.connection_connected()}</span>
+              </Match>
+            </Switch>
+          </div>
+        </div>
         <CaffeineToggle />
         {props.trailing}
-      </div>
-      <div class="flex items-center justify-end gap-2">
-        <ColorPalette />
         <ThemeToggle />
+      </div>
+      <div class="flex items-center gap-2">
+        <ColorPalette />
+        <div class="flex-1" />
         {props.actions}
         <Show when={isConnected()}>
           <DisconnectButton />
