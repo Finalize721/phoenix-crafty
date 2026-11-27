@@ -2,7 +2,7 @@ import { expect, test } from "./helpers/fixtures";
 
 test.use({ locale: "en-US" });
 
-test("Crafty header has two compact rows and the source link lives in settings", async ({
+test("Crafty header aligns appearance controls and device locator lives in settings", async ({
   page,
   bluetoothDevice,
 }) => {
@@ -17,12 +17,25 @@ test("Crafty header has two compact rows and the source link lives in settings",
   await expect(first.getByRole("button", { name: "Keep screen awake" })).toBeVisible();
   await expect(first.getByRole("img", { name: /Battery: 80 %/ })).toBeVisible();
   await expect(second.getByRole("button", { name: "Customize appearance" })).toBeVisible();
-  await expect(second.getByRole("button", { name: "Dark Mode" })).toBeVisible();
+  const darkMode = first.getByRole("button", { name: "Dark Mode" });
+  await expect(darkMode).toBeVisible();
+  const battery = await first.getByRole("img", { name: /Battery: 80 %/ }).boundingBox();
+  const theme = await darkMode.boundingBox();
+  const bluetooth = await first.locator(":scope > div").first().boundingBox();
+  const palette = await second.getByRole("button", { name: "Customize appearance" }).boundingBox();
+  expect(theme!.x).toBeGreaterThanOrEqual(battery!.x + battery!.width);
+  expect(Math.abs(palette!.x - bluetooth!.x)).toBeLessThan(2);
+  expect(palette!.y).toBeGreaterThan(bluetooth!.y);
   await expect(second.getByRole("button", { name: "Notify at 99% battery" })).toBeVisible();
   await expect(second.getByRole("button", { name: "Disconnect" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Source code" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Find My Device" })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole("link", { name: "Settings", exact: true }).click();
+  const findDevice = page.getByRole("button", { name: "Find My Device" });
+  await expect(findDevice).toBeVisible();
+  await expect(findDevice).toBeEnabled();
+  await expect(page.locator("main").getByRole("button").first()).toHaveAccessibleName("Find My Device");
   await expect(page.getByRole("link", { name: "Source code" })).toHaveAttribute(
     "href", "https://github.com/Finalize721/phoenix-crafty"
   );
