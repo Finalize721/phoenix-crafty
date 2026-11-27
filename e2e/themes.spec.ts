@@ -94,44 +94,71 @@ test("dark-mode toggle keeps its saved preference", async ({
   else await expect(page.locator("html")).not.toHaveClass(/dark/);
 });
 
-test("custom base and accent colors persist in the palette", async ({
-  page,
-}) => {
+test("RGB sliders start at the selected color and preserve other channels", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");
-
-  await page.getByRole("button", { name: "Customize appearance" }).click();
+  const openPalette = () => page.getByRole("button", { name: "Customize appearance" }).click();
+  await openPalette();
   const palette = page.locator(".palette-popover");
   await palette.locator("select").selectOption("signal");
-
-  const colors = palette.locator('input[type="color"]');
-  await colors.nth(0).evaluate((element) => {
-    const input = element as HTMLInputElement;
-    input.value = "#28445c";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-  await colors.nth(1).evaluate((element) => {
-    const input = element as HTMLInputElement;
-    input.value = "#c14372";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-
-  await expect(page.locator("html")).toHaveAttribute("data-skin", "signal");
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-custom-base",
-    "true"
-  );
-  await expect(colors.nth(0)).toHaveValue("#28445c");
-  await expect(colors.nth(1)).toHaveValue("#c14372");
+  const base = palette.getByRole("button", { name: "Base color", exact: true });
+  const accent = palette.getByRole("button", { name: "Accent color", exact: true });
+  await base.click();
+  const sliders = palette.getByRole("slider");
+  const hex = palette.getByRole("textbox", { name: "Hex color" });
+  await expect(sliders.nth(0)).toHaveValue("234");
+  await expect(sliders.nth(1)).toHaveValue("244");
+  await expect(sliders.nth(2)).toHaveValue("239");
+  await sliders.nth(0).fill("233");
+  await expect(hex).toHaveValue("#e9f4ef");
+  await expect(sliders.nth(1)).toHaveValue("244");
+  await expect(sliders.nth(2)).toHaveValue("239");
+  await hex.fill("#28445c");
+  await hex.press("Tab");
+  await expect(base).toContainText("#28445C");
+  await accent.click();
+  await expect(sliders.nth(0)).toHaveValue("18");
+  await expect(sliders.nth(1)).toHaveValue("108");
+  await expect(sliders.nth(2)).toHaveValue("84");
+  await hex.fill("#c14372");
+  await hex.press("Tab");
+  await expect(accent).toContainText("#C14372");
+  await expect(page.locator("html")).toHaveAttribute("data-custom-base", "true");
   await page.reload();
-
-  await page.getByRole("button", { name: "Customize appearance" }).click();
+  await openPalette();
   await expect(palette.locator("select")).toHaveValue("signal");
-  await expect(palette.locator('input[type="color"]').nth(0)).toHaveValue(
-    "#28445c"
-  );
-  await expect(palette.locator('input[type="color"]').nth(1)).toHaveValue(
-    "#c14372"
-  );
+  await base.click();
+  await expect(sliders.nth(0)).toHaveValue("40");
+  await expect(sliders.nth(1)).toHaveValue("68");
+  await expect(sliders.nth(2)).toHaveValue("92");
+  await sliders.nth(2).fill("93");
+  await expect(hex).toHaveValue("#28445d");
+  await base.click();
+  await base.click();
+  await expect(sliders.nth(2)).toHaveValue("93");
+  await accent.click();
+  await expect(sliders.nth(0)).toHaveValue("193");
+  await expect(sliders.nth(1)).toHaveValue("67");
+  await expect(sliders.nth(2)).toHaveValue("114");
   await page.keyboard.press("Escape");
+});
+
+test("dark preset starts from its dark accent and preserves its base appearance when edited", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Customize appearance" }).click();
+  const palette = page.locator(".palette-popover");
+  await palette.getByRole("button", { name: "Accent color", exact: true }).click();
+  const sliders = palette.getByRole("slider");
+  await expect(sliders.nth(0)).toHaveValue("134");
+  await expect(sliders.nth(1)).toHaveValue("180");
+  await expect(sliders.nth(2)).toHaveValue("255");
+  await palette.getByRole("button", { name: "Base color", exact: true }).click();
+  await expect(sliders.nth(0)).toHaveValue("31");
+  await expect(sliders.nth(1)).toHaveValue("57");
+  await expect(sliders.nth(2)).toHaveValue("109");
+  await sliders.nth(0).fill("32");
+  await expect(palette.getByRole("textbox", { name: "Hex color" })).toHaveValue("#20396d");
+  await expect(page.locator("html")).toHaveCSS("--custom-base", "#20396d");
 });
