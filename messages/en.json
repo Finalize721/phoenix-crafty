@@ -288,5 +288,10 @@
   "crafty_extensionResetConfirmed": "Timer reset confirmed. Extension remaining: {seconds} s.",
   "crafty_extensionReadFailed": "Could not confirm the timer. Extension stopped.",
   "crafty_extensionStarted": "Experiment active for {minutes} minutes. First timer check in 30 seconds.",
-  "crafty_extensionBackground": "App in background. Extension stopped; the device timer continues."
+  "crafty_extensionBackground": "App in background. Extension stopped; the device timer continues.",
+  "settings_colorRed": "Red",
+  "settings_colorGreen": "Green",
+  "settings_colorBlue": "Blue",
+  "settings_colorHex": "Hex color",
+  "settings_darkBaseColorHint": "Dark mode dims the base color. The preview shows the resulting background."
 }
