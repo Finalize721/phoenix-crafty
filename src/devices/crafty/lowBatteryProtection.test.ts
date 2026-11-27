@@ -373,6 +373,24 @@ describe("low-battery protection", () => {
     expect(h.io.heaterOff).toHaveBeenCalledOnce();
   });
 
+  it("rearms after a failed 42% crossing and shuts down at the new 30% threshold", async () => {
+    const h = setup({ threshold: 42 });
+    h.io.refreshLiveState.mockRejectedValueOnce(new Error("read"));
+    h.startSession();
+    h.reading(43);
+    h.reading(42);
+    await h.settle();
+    expect(h.io.reportError).toHaveBeenCalledWith("verification");
+    expect(h.io.heaterOff).not.toHaveBeenCalled();
+    h.setSettings({ threshold: 30 });
+    h.reading(31);
+    await h.settle();
+    expect(h.io.heaterOff).not.toHaveBeenCalled();
+    h.reading(30);
+    await h.settle();
+    expect(h.io.heaterOff).toHaveBeenCalledOnce();
+  });
+
   it("retries failed verification only on subsequent readings, at most three times", async () => {
     const h = setup({ threshold: 35 });
     h.io.refreshLiveState.mockRejectedValue(new Error("read"));
