@@ -30,7 +30,9 @@ const CraftyStoreProvider = (props: {
           message:
             reason === "verification"
               ? m.crafty_lowBatteryVerificationFailed()
-              : m.crafty_lowBatteryShutdownFailed(),
+              : reason === "warning"
+                ? m.crafty_lowBatteryDeviceWarningFailed()
+                : m.crafty_lowBatteryShutdownFailed(),
         }),
     }
   );
