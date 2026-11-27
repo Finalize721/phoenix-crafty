@@ -1,7 +1,8 @@
 import * as Popover from "@kobalte/core/popover";
 import PaletteIcon from "lucide-solid/icons/palette";
-import { createSignal, For } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { m } from "../paraglide/messages";
+import { useDarkMode } from "../provider/DarkModeProvider";
 
 const palettes = [
   {
@@ -9,18 +10,24 @@ const palettes = [
     name: "Phoenix Court",
     accent: "#245fc6",
     base: "#eef3fc",
+    darkBase: "#0b1426",
+    darkAccent: "#86b4ff",
   },
   {
     id: "signal",
     name: "Ghost Signal",
     accent: "#126c54",
     base: "#eaf4ef",
+    darkBase: "#071b18",
+    darkAccent: "#74e8bd",
   },
   {
     id: "jelly",
     name: "Jellyfish Hotel",
     accent: "#8051ab",
     base: "#f5eef9",
+    darkBase: "#191329",
+    darkAccent: "#dfb3fc",
   },
 ] as const;
 
@@ -47,11 +54,21 @@ const readColor = (key: string) => {
   }
 };
 
-const defaultAccent = (id: PaletteId) =>
-  palettes.find((palette) => palette.id === id)?.accent ?? palettes[0].accent;
+const selectedPalette = () =>
+  palettes.find((entry) => entry.id === palette()) ?? palettes[0];
 
-const defaultBase = (id: PaletteId) =>
-  palettes.find((palette) => palette.id === id)?.base ?? palettes[0].base;
+const rgb = (hex: string) =>
+  [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
+
+const hexColor = (channels: number[]) =>
+  "#" + channels.map((channel) =>
+    Math.min(255, Math.max(0, Math.round(channel))).toString(16).padStart(2, "0")
+  ).join("");
+
+// The existing dark-mode CSS mixes custom base colors with black (35%).
+// Derive a matching source color when editing a dark preset for the first time.
+const darkBaseSource = (color: string) =>
+  hexColor(rgb(color).map((channel) => channel / 0.35));
 
 const [palette, setPalette] = createSignal(readPalette());
 const [customAccent, setCustomAccent] = createSignal(
@@ -60,7 +77,6 @@ const [customAccent, setCustomAccent] = createSignal(
 const [customBase, setCustomBase] = createSignal(
   readColor("crafty-base-color")
 );
-const accent = () => customAccent() ?? defaultAccent(palette());
 
 const applyAccent = (color: string) => {
   const channels = [1, 3, 5].map((offset) => {
@@ -130,7 +146,106 @@ const clearBaseColor = () => {
   }
 };
 
+const ColorEditor = (props: {
+  label: string;
+  value: string;
+  expanded: boolean;
+  onToggle: () => void;
+  onChange: (color: string) => void;
+  darkPreview?: string;
+}) => {
+  const channels = [
+    { label: () => m.settings_colorRed(), color: "#ef4444" },
+    { label: () => m.settings_colorGreen(), color: "#22c55e" },
+    { label: () => m.settings_colorBlue(), color: "#3b82f6" },
+  ];
+  const changeChannel = (index: number, value: number) => {
+    const next = rgb(props.value);
+    next[index] = value;
+    const hex = hexColor(next);
+    if (hex !== props.value.toLowerCase()) props.onChange(hex);
+  };
+
+  return (
+    <div>
+      <div class="palette-field">
+        <span>{props.label}</span>
+        <button
+          type="button"
+          class="flex h-10 shrink-0 items-center gap-2 rounded-lg border bg-card px-2 font-mono text-xs"
+          aria-label={props.label}
+          aria-expanded={props.expanded}
+          onClick={props.onToggle}
+        >
+          <span class="size-6 rounded border border-border" style={{ background: props.value }} />
+          {props.value.toUpperCase()}
+        </button>
+      </div>
+      <Show when={props.expanded}>
+        <div class="flex flex-col gap-2 pb-3" role="group" aria-label={props.label}>
+          <For each={channels}>
+            {(channel, index) => (
+              <label class="flex flex-col gap-1">
+                <span class="flex justify-between text-xs">
+                  <span>{channel.label()}</span>
+                  <span class="tabular-nums">{rgb(props.value)[index()]}</span>
+                </span>
+                <input
+                  type="range"
+                  min="0"
+                  max="255"
+                  step="1"
+                  value={rgb(props.value)[index()]}
+                  aria-label={channel.label()}
+                  class="h-7 w-full"
+                  style={{ "accent-color": channel.color }}
+                  onInput={(event) => changeChannel(index(), Number(event.currentTarget.value))}
+                />
+              </label>
+            )}
+          </For>
+          <label class="flex items-center justify-between gap-2 text-xs">
+            {m.settings_colorHex()}
+            <input
+              type="text"
+              value={props.value}
+              maxlength={7}
+              spellcheck={false}
+              class="w-24 rounded-md border bg-background px-2 py-1 font-mono"
+              onChange={(event) => {
+                const value = event.currentTarget.value.trim().toLowerCase();
+                if (/^#[\da-f]{6}$/.test(value) && value !== props.value.toLowerCase()) props.onChange(value);
+                else event.currentTarget.value = props.value;
+              }}
+            />
+          </label>
+          <Show when={props.darkPreview}>
+            <div class="flex items-center gap-2">
+              <span class="size-8 shrink-0 rounded border" style={{ background: props.darkPreview }} />
+              <p class="text-xs text-muted-foreground">{m.settings_darkBaseColorHint()}</p>
+            </div>
+          </Show>
+        </div>
+      </Show>
+    </div>
+  );
+};
+
 export const ColorPalette = () => {
+  const { isDarkMode } = useDarkMode();
+  const [editing, setEditing] = createSignal<"base" | "accent">();
+  const base = () => customBase() ?? (isDarkMode()
+    ? darkBaseSource(selectedPalette().darkBase)
+    : selectedPalette().base);
+  const basePreview = () => isDarkMode()
+    ? hexColor(rgb(base()).map((channel) => channel * 0.35))
+    : undefined;
+  const accent = () => customAccent() ?? (isDarkMode()
+    ? selectedPalette().darkAccent
+    : selectedPalette().accent);
+  const toggleEditor = (field: "base" | "accent") =>
+    setEditing((current) => current === field ? undefined : field);
+
   const selectPalette = (id: string) => {
     if (!isPaletteId(id)) return;
     setPalette(id);
@@ -182,7 +297,7 @@ export const ColorPalette = () => {
 
   return (
     <div class="shrink-0">
-      <Popover.Root placement="bottom-end" gutter={8}>
+      <Popover.Root placement="bottom-end" gutter={8} onOpenChange={(open) => { if (!open) setEditing(undefined); }}>
         <Popover.Trigger
           class="palette-trigger"
           aria-label={m.settings_customizeAppearance()}
@@ -215,24 +330,21 @@ export const ColorPalette = () => {
                 </For>
               </select>
             </label>
-            <label class="palette-field">
-              <span>{m.settings_baseColor()}</span>
-              <input
-                type="color"
-                aria-label={m.settings_baseColor()}
-                value={customBase() ?? defaultBase(palette())}
-                onInput={(event) => selectBaseColor(event.currentTarget.value)}
-              />
-            </label>
-            <label class="palette-field">
-              <span>{m.settings_accentColor()}</span>
-              <input
-                type="color"
-                aria-label={m.settings_accentColor()}
-                value={accent()}
-                onInput={(event) => selectAccent(event.currentTarget.value)}
-              />
-            </label>
+            <ColorEditor
+              label={m.settings_baseColor()}
+              value={base()}
+              expanded={editing() === "base"}
+              onToggle={() => toggleEditor("base")}
+              onChange={selectBaseColor}
+              darkPreview={basePreview()}
+            />
+            <ColorEditor
+              label={m.settings_accentColor()}
+              value={accent()}
+              expanded={editing() === "accent"}
+              onToggle={() => toggleEditor("accent")}
+              onChange={selectAccent}
+            />
             <button class="palette-reset" type="button" onClick={resetColors}>
               {m.settings_resetPalette()}
             </button>
